@@ -3,42 +3,46 @@ package moze_intel.projecte.gameObjs.items.rings;
 import baubles.api.BaubleType;
 import baubles.api.IBauble;
 import com.google.common.collect.Lists;
-import cpw.mods.fml.common.Optional;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import moze_intel.projecte.api.item.IPedestalItem;
+import moze_intel.projecte.api.item.IProjectileShooter;
 import moze_intel.projecte.config.ProjectEConfig;
+import moze_intel.projecte.gameObjs.entity.EntitySWRGProjectile;
 import moze_intel.projecte.gameObjs.items.IFlightProvider;
 import moze_intel.projecte.gameObjs.items.ItemPE;
 import moze_intel.projecte.gameObjs.tiles.DMPedestalTile;
-import moze_intel.projecte.handlers.PlayerChecks;
+import moze_intel.projecte.handlers.InternalAbilities;
+import moze_intel.projecte.utils.ItemHelper;
 import moze_intel.projecte.utils.MathUtils;
 import moze_intel.projecte.utils.WorldHelper;
-import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.effect.EntityLightningBolt;
+import net.minecraft.entity.passive.EntityTameable;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.EnumChatFormatting;
-import net.minecraft.util.IIcon;
-import net.minecraft.util.MathHelper;
-import net.minecraft.util.StatCollector;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.EnumActionResult;
+import net.minecraft.util.EnumHand;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.World;
+import net.minecraftforge.fml.common.Optional;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 
-@Optional.Interface(iface = "baubles.api.IBauble", modid = "Baubles")
-public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvider
+@Optional.Interface(iface = "baubles.api.IBauble", modid = "baubles")
+public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvider, IProjectileShooter
 {
-	@SideOnly(Side.CLIENT)
-	private IIcon ringOff;
-	@SideOnly(Side.CLIENT)
-	private IIcon[] ringOn;
-
 	public SWRG()
 	{
 		this.setUnlocalizedName("swrg");
@@ -49,34 +53,29 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 
 	private void tick(ItemStack stack, EntityPlayer player)
 	{
-		if (stack.getItemDamage() > 1)
+		if (ItemHelper.getOrCreateCompound(stack).getInteger(TAG_MODE) > 1)
 		{
 			// Repel on both sides - smooth animation
-			WorldHelper.repelEntitiesInAABBFromPoint(player.worldObj, player.boundingBox.expand(5.0, 5.0, 5.0), player.posX, player.posY, player.posZ, true);
+			WorldHelper.repelEntitiesInAABBFromPoint(player.getEntityWorld(), player.getEntityBoundingBox().grow(5), player.posX, player.posY, player.posZ, true);
 		}
 
-		if (player.worldObj.isRemote)
+		if (player.getEntityWorld().isRemote)
 		{
 			return;
 		}
 
 		EntityPlayerMP playerMP = (EntityPlayerMP) player;
 
-		if (!stack.hasTagCompound())
-		{
-			stack.stackTagCompound = new NBTTagCompound();
-		}
-
 		if (getEmc(stack) == 0 && !consumeFuel(player, stack, 64, false))
 		{
-			if (stack.getItemDamage() > 0)
+			if (stack.getTagCompound().getInteger(TAG_MODE) > 0)
 			{
 				changeMode(stack, 0);
 			}
 
 			if (playerMP.capabilities.allowFlying)
 			{
-				PlayerChecks.disableSwrgFlightOverride(playerMP);
+				playerMP.getCapability(InternalAbilities.CAPABILITY, null).disableSwrgFlightOverride();
 			}
 
 			return;
@@ -84,21 +83,21 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 
 		if (!playerMP.capabilities.allowFlying)
 		{
-			PlayerChecks.enableSwrgFlightOverride(playerMP);
+			playerMP.getCapability(InternalAbilities.CAPABILITY, null).enableSwrgFlightOverride();
 		}
 
 		if (playerMP.capabilities.isFlying)
 		{
 			if (!isFlyingEnabled(stack))
 			{
-				changeMode(stack, stack.getItemDamage() == 0 ? 1 : 3);
+				changeMode(stack, stack.getTagCompound().getInteger(TAG_MODE) == 0 ? 1 : 3);
 			}
 		}
 		else
 		{
 			if (isFlyingEnabled(stack))
 			{
-				changeMode(stack, stack.getItemDamage() == 1 ? 0 : 2);
+				changeMode(stack, stack.getTagCompound().getInteger(TAG_MODE) == 1 ? 0 : 2);
 			}
 		}
 
@@ -109,11 +108,11 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 			toRemove = 0.32F;
 		}
 
-		if (stack.getItemDamage() == 2)
+		if (stack.getTagCompound().getInteger(TAG_MODE) == 2)
 		{
 			toRemove = 0.32F;
 		}
-		else if (stack.getItemDamage() == 3)
+		else if (stack.getTagCompound().getInteger(TAG_MODE) == 3)
 		{
 			toRemove = 0.64F;
 		}
@@ -125,7 +124,7 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 
 	private boolean isFlyingEnabled(ItemStack stack)
 	{
-		return stack.getItemDamage() == 1 || stack.getItemDamage() == 3;
+		return stack.getTagCompound().getInteger(TAG_MODE) == 1 || stack.getTagCompound().getInteger(TAG_MODE)== 3;
 	}
 
 	@Override
@@ -138,14 +137,16 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 		tick(stack, ((EntityPlayer) entity));
 	}
 	
+	@Nonnull
 	@Override
-	public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player)
+	public ActionResult<ItemStack> onItemRightClick(World world, EntityPlayer player, @Nonnull EnumHand hand)
 	{
+		ItemStack stack = player.getHeldItem(hand);
 		if (!world.isRemote)
 		{
 			int newMode = 0;
 			
-			switch (stack.getItemDamage())
+			switch (ItemHelper.getOrCreateCompound(stack).getInteger(TAG_MODE))
 			{
 				case 0:
 					newMode = 2;
@@ -163,7 +164,7 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 			
 			changeMode(stack, newMode);
 		}
-		return stack;
+		return ActionResult.newResult(EnumActionResult.SUCCESS, stack);
 	}
 
 	/**
@@ -175,7 +176,7 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 	 */
 	public void changeMode(ItemStack stack, int mode)
 	{
-		stack.setItemDamage(mode);
+		ItemHelper.getOrCreateCompound(stack).setInteger(TAG_MODE, mode);
 	}
 
 	@Override
@@ -190,88 +191,71 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 	{
 		return false;
 	}
-	
-	@SideOnly(Side.CLIENT)
-	public IIcon getIconFromDamage(int dmg)
-	{
-		if (dmg == 0)
-		{
-			return ringOff;
-		}
-		
-		else
-		{
-			return ringOn[MathHelper.clamp_int(dmg - 1, 0, 2)];
-		}
-	}
-	
+
 	@Override
-	@SideOnly(Side.CLIENT)
-	public void registerIcons(IIconRegister register)
-	{
-		ringOff = register.registerIcon(this.getTexture("rings", "swrg_off"));
-		ringOn = new IIcon[3];
-		
-		for (int i = 0; i < 3; i++)
-		{
-			ringOn[i] = register.registerIcon(this.getTexture("rings", "swrg_on"+(i+1)));
-		}
-	}
-	
-	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public baubles.api.BaubleType getBaubleType(ItemStack itemstack)
 	{
 		return BaubleType.RING;
 	}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public void onWornTick(ItemStack stack, EntityLivingBase ent) 
 	{
 		if (!(ent instanceof EntityPlayer))
 		{
 			return;
 		}
+
 		tick(stack, ((EntityPlayer) ent));
 	}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public void onEquipped(ItemStack stack, EntityLivingBase player) {}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public void onUnequipped(ItemStack itemstack, EntityLivingBase player) {}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public boolean canEquip(ItemStack itemstack, EntityLivingBase player) 
 	{
 		return true;
 	}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public boolean canUnequip(ItemStack itemstack, EntityLivingBase player) 
 	{
 		return true;
 	}
 
 	@Override
-	public void updateInPedestal(World world, int x, int y, int z)
+	public void updateInPedestal(@Nonnull World world, @Nonnull BlockPos pos)
 	{
-		if (!world.isRemote && ProjectEConfig.swrgPedCooldown != -1)
+		if (!world.isRemote && ProjectEConfig.pedestalCooldown.swrgPedCooldown != -1)
 		{
-			DMPedestalTile tile = ((DMPedestalTile) world.getTileEntity(x, y, z));
+			TileEntity te = world.getTileEntity(pos);
+			if(!(te instanceof DMPedestalTile))
+			{
+				return;
+			}
+			DMPedestalTile tile = (DMPedestalTile) te;
 			if (tile.getActivityCooldown() <= 0)
 			{
 				List<EntityLiving> list = world.getEntitiesWithinAABB(EntityLiving.class, tile.getEffectBounds());
 				for (EntityLiving living : list)
 				{
-					world.addWeatherEffect(new EntityLightningBolt(world, living.posX, living.posY, living.posZ));
+					if (living instanceof EntityTameable && ((EntityTameable) living).isTamed())
+					{
+						continue;
+					}
+					world.addWeatherEffect(new EntityLightningBolt(world, living.posX, living.posY, living.posZ, false));
 				}
-				tile.setActivityCooldown(ProjectEConfig.swrgPedCooldown);
+				tile.setActivityCooldown(ProjectEConfig.pedestalCooldown.swrgPedCooldown);
 			}
 			else
 			{
@@ -280,16 +264,27 @@ public class SWRG extends ItemPE implements IBauble, IPedestalItem, IFlightProvi
 		}
 	}
 
+	@Nonnull
+	@SideOnly(Side.CLIENT)
 	@Override
 	public List<String> getPedestalDescription()
 	{
-		List<String> list = Lists.newArrayList();
-		if (ProjectEConfig.swrgPedCooldown != -1)
+		List<String> list = new ArrayList<>();
+		if (ProjectEConfig.pedestalCooldown.swrgPedCooldown != -1)
 		{
-			list.add(EnumChatFormatting.BLUE + StatCollector.translateToLocal("pe.swrg.pedestal1"));
-			list.add(EnumChatFormatting.BLUE + String.format(
-					StatCollector.translateToLocal("pe.swrg.pedestal2"), MathUtils.tickToSecFormatted(ProjectEConfig.swrgPedCooldown)));
+			list.add(TextFormatting.BLUE + I18n.format("pe.swrg.pedestal1"));
+			list.add(TextFormatting.BLUE + I18n.format("pe.swrg.pedestal2", MathUtils.tickToSecFormatted(ProjectEConfig.pedestalCooldown.swrgPedCooldown)));
 		}
 		return list;
+	}
+
+	@Override
+	public boolean shootProjectile(@Nonnull EntityPlayer player, @Nonnull ItemStack stack, @Nullable EnumHand hand)
+	{
+		EntitySWRGProjectile projectile = new EntitySWRGProjectile(player.world, player, false);
+		projectile.setHeadingFromThrower(player, player.rotationPitch, player.rotationYaw, 0, 1.5F, 1);
+		player.world.spawnEntity(projectile);
+		// projectile.playSound(PESounds.WIND, 1.0F, 1.0F);
+		return true;
 	}
 }

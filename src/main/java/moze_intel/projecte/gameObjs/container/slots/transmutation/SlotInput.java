@@ -1,15 +1,17 @@
 package moze_intel.projecte.gameObjs.container.slots.transmutation;
 
 import moze_intel.projecte.api.item.IItemEmc;
-import moze_intel.projecte.gameObjs.ObjHandler;
 import moze_intel.projecte.gameObjs.container.inventory.TransmutationInventory;
+import moze_intel.projecte.gameObjs.container.slots.SlotPredicates;
 import moze_intel.projecte.utils.EMCHelper;
-import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.items.SlotItemHandler;
 
-public class SlotInput extends Slot
+import javax.annotation.Nonnull;
+
+public class SlotInput extends SlotItemHandler
 {
-	private TransmutationInventory inv;
+	private final TransmutationInventory inv;
 	
 	public SlotInput(TransmutationInventory inv, int par2, int par3, int par4)
 	{
@@ -18,15 +20,15 @@ public class SlotInput extends Slot
 	}
 	
 	@Override
-	public boolean isItemValid(ItemStack stack)
+	public boolean isItemValid(@Nonnull ItemStack stack)
 	{
-		return !this.getHasStack() && EMCHelper.doesItemHaveEmc(stack);
+		return SlotPredicates.RELAY_INV.test(stack);
 	}
 	
 	@Override
-	public void putStack(ItemStack stack)
+	public void putStack(@Nonnull ItemStack stack)
 	{
-		if (stack == null)
+		if (stack.isEmpty())
 		{
 			return;
 		}
@@ -38,25 +40,20 @@ public class SlotInput extends Slot
 			IItemEmc itemEmc = ((IItemEmc) stack.getItem());
 			double remainingEmc = itemEmc.getMaximumEmc(stack) - (int) Math.ceil(itemEmc.getStoredEmc(stack));
 			
-			if (inv.emc >= remainingEmc)
+			if (inv.provider.getEmc() >= remainingEmc)
 			{
 				itemEmc.addEmc(stack, remainingEmc);
 				inv.removeEmc(remainingEmc);
 			}
 			else
 			{
-				itemEmc.addEmc(stack, inv.emc);
-				inv.emc = 0;
+				itemEmc.addEmc(stack, inv.provider.getEmc());
+				inv.removeEmc(inv.provider.getEmc());
 			}
 		}
-		
-		if (stack.getItem() != ObjHandler.tome)
-		{
+
+		if (EMCHelper.doesItemHaveEmc(stack)) {
 			inv.handleKnowledge(stack.copy());
-		}
-		else
-		{
-			inv.updateOutputs();
 		}
 	}
 	

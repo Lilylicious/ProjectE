@@ -12,16 +12,20 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.world.World;
 
+import javax.annotation.Nonnull;
+
 public class PhilosStoneContainer extends Container
 {
-	private InventoryCrafting craftMatrix = new InventoryCrafting(this, 3, 3);
-	private IInventory craftResult = new InventoryCraftResult();
-	private World worldObj;
+	private final InventoryCrafting craftMatrix = new InventoryCrafting(this, 3, 3);
+	private final InventoryCraftResult craftResult = new InventoryCraftResult();
+	private final World worldObj;
+	private final EntityPlayer player;
 	
 	public PhilosStoneContainer(InventoryPlayer invPlayer) 
 	{
-		this.worldObj = invPlayer.player.worldObj;
-		
+		this.player = invPlayer.player;
+		this.worldObj = player.getEntityWorld();
+
 		//CraftingResult
 		this.addSlotToContainer(new SlotCrafting(invPlayer.player, this.craftMatrix, this.craftResult, 0, 124, 35));
 		
@@ -45,7 +49,7 @@ public class PhilosStoneContainer extends Container
 	@Override
 	public void onCraftMatrixChanged(IInventory inv)
 	{
-		craftResult.setInventorySlotContents(0, CraftingManager.getInstance().findMatchingRecipe(craftMatrix, worldObj));
+		this.slotChangedCraftingGrid(player.world, this.player, this.craftMatrix, this.craftResult);
 	}
 	
 	@Override
@@ -57,27 +61,28 @@ public class PhilosStoneContainer extends Container
 		{
 			for (int i = 0; i < 9; ++i)
 			{
-				ItemStack itemstack = this.craftMatrix.getStackInSlotOnClosing(i);
+				ItemStack itemstack = this.craftMatrix.removeStackFromSlot(i);
 
-				if (itemstack != null)
+				if (!itemstack.isEmpty())
 				{
-					player.dropPlayerItemWithRandomChoice(itemstack, false);
+					player.dropItem(itemstack, false);
 				}
 			}
 		}
 	}
 	
 	@Override
-	public boolean canInteractWith(EntityPlayer player)
+	public boolean canInteractWith(@Nonnull EntityPlayer player)
 	{
 		return true;
 	}
-	
+
+	@Nonnull
 	@Override
 	public ItemStack transferStackInSlot(EntityPlayer player, int index)
 	{
-		ItemStack itemstack = null;
-		Slot slot = (Slot)this.inventorySlots.get(index);
+		ItemStack itemstack = ItemStack.EMPTY;
+		Slot slot = this.inventorySlots.get(index);
 
 		if (slot != null && slot.getHasStack())
 		{
@@ -88,7 +93,7 @@ public class PhilosStoneContainer extends Container
 			{
 				if (!this.mergeItemStack(itemstack1, 10, 46, true))
 				{
-					return null;
+					return ItemStack.EMPTY;
 				}
 
 				slot.onSlotChange(itemstack1, itemstack);
@@ -97,44 +102,44 @@ public class PhilosStoneContainer extends Container
 			{
 				if (!this.mergeItemStack(itemstack1, 37, 46, false))
 				{
-					return null;
+					return ItemStack.EMPTY;
 				}
 			}
 			else if (index >= 37 && index < 46)
 			{
 				if (!this.mergeItemStack(itemstack1, 10, 37, false))
 				{
-					return null;
+					return ItemStack.EMPTY;
 				}
 			}
 			else if (!this.mergeItemStack(itemstack1, 10, 46, false))
 			{
-				return null;
+				return ItemStack.EMPTY;
 			}
 
-			if (itemstack1.stackSize == 0)
+			if (itemstack1.isEmpty())
 			{
-				slot.putStack((ItemStack)null);
+				slot.putStack(ItemStack.EMPTY);
 			}
 			else
 			{
 				slot.onSlotChanged();
 			}
 
-			if (itemstack1.stackSize == itemstack.stackSize)
+			if (itemstack1.getCount() == itemstack.getCount())
 			{
-				return null;
+				return ItemStack.EMPTY;
 			}
 
-			slot.onPickupFromSlot(player, itemstack1);
+			itemstack = slot.onTake(player, itemstack1);
 		}
 		
 		return itemstack;
 	}
 	
 	@Override
-	public boolean func_94530_a(ItemStack stack, Slot slot)
+	public boolean canMergeSlot(ItemStack stack, Slot slot)
 	{
-		return slot.inventory != this.craftResult && super.func_94530_a(stack, slot);
+		return slot.inventory != this.craftResult && super.canMergeSlot(stack, slot);
 	}
 }

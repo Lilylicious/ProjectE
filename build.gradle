@@ -1,3 +1,6 @@
+import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+
 buildscript {
     repositories {
         mavenCentral()
@@ -11,14 +14,14 @@ buildscript {
         }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
     }
 }
 
-apply plugin: 'forge'
+apply plugin: 'net.minecraftforge.gradle.forge'
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
 version = "${projecte_version}"
 group= "java.moze_intel" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
@@ -26,41 +29,63 @@ archivesBaseName = "ProjectE"
 
 minecraft {
     version = "${minecraft_version}-${forge_version}"
-    runDir = "eclipse"
-
+    runDir = "run"
+    mappings = 'snapshot_20170624'
+	
     replace "@VERSION@", project.version
     replaceIn "PECore.java"
+    useDepAts = true
+}
+
+jar {
+    classifier = 'universal'
+    manifest {
+        attributes 'FMLAT': 'pe_at.cfg'
+    }
 }
 
 repositories {
-    maven { //Waila Repo
-        name "Mobius Repo"
-        url "http://mobiusstrip.eu/maven"
-    }
-    maven { //NEI Repo
-        name 'CB Repo'
-        url "http://chickenbones.net/maven/"
-    }
+	maven { //MinecraftForge
+		name "MinecraftForge Maven"
+		url "http://files.minecraftforge.net/maven/"
+	}
+
     maven {
         name 'Chisel'
         url "http://maven.tterrag.com/"
     }
-    ivy {
-        name "MineTweaker3"
-        artifactPattern "http://minetweaker3.powerofbytes.com/download/[module]-([classifier]-)[revision].[ext]"
+
+    maven {
+        name = "thiakil"
+        url = "http://maven.thiakil.com"
+    }
+
+    maven {
+        name 'JEI'
+        url "http://dvs1.progwml6.com/files/maven"
+    }
+
+    maven {
+        name 'jared'
+        url "http://blamejared.com/maven/"
     }
 }
  
 dependencies {
     testCompile group: 'junit', name: 'junit', version:'4.11'
 
-    compile "com.cricketcraft.chisel:Chisel2:2.5.0.2:api"
-	
-    compile "codechicken:CodeChickenCore:1.7.10-1.0.4.29:dev"
-    compile "codechicken:CodeChickenLib:1.7.10-1.1.1.110:dev"
-    compile "codechicken:NotEnoughItems:1.7.10-1.0.4.83:dev"
+    deobfCompile "mezz.jei:jei_1.12:4.7.0.67"
+    deobfCompile "com.azanor.baubles:Baubles:1.12-1.5.2"
+    /*deobfCompile "MineTweaker3:MineTweaker3-API:3.0.11.26"
+    deobfCompile "MineTweaker3:MineTweaker3-MC1102-Main:1.10.2-3.0.11.26"
+    deobfCompile "MineTweaker3:ZenScript:3.0.11.26"*/
 
-    compile name: 'MineTweaker3', version: 'Dev-1.7.10-3.0.9C', ext: 'jar'
+    compile fileTree(dir: 'libs', include: '*.jar')
+}
+
+compileJava {
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
 }
 
 processResources
@@ -88,10 +113,25 @@ task devJar(type: Jar) {
     from sourceSets.main.output
     classifier = 'dev'
     version = "${project.version}"
+
+    println(defaultTasks)
+}
+
+task updateJSON(dependsOn: 'reobfJar') {
+    def updateJsonFile = file('update.json')
+    def updateJson = new JsonSlurper().parse(updateJsonFile) as Map
+
+    updateJson."${minecraft_version}"."${project.version}" = "See https://minecraft.curseforge.com/projects/projecte/files for detailed information."
+
+    // Update promos
+    updateJson.promos."${minecraft_version}-latest" = "${project.version}"
+    updateJson.promos."${minecraft_version}-recommended" = "${project.version}"
+
+    updateJsonFile.write(JsonOutput.prettyPrint(JsonOutput.toJson(updateJson)))
 }
 
 artifacts {
     archives devJar
 }
 
-idea.module.inheritOutputDirs = true
+defaultTasks 'clean', 'build', 'updateJSON'

@@ -1,18 +1,18 @@
 package moze_intel.projecte.proxies;
 
-import moze_intel.projecte.playerData.AlchBagProps;
-import moze_intel.projecte.playerData.TransmutationProps;
+import moze_intel.projecte.api.capabilities.IAlchBagProvider;
+import moze_intel.projecte.api.capabilities.IKnowledgeProvider;
 import net.minecraft.entity.player.EntityPlayer;
 
 public class ServerProxy implements IProxy
 {
-	public void registerKeyBinds() {} 
-	public void registerRenderers() {}
-	public void registerClientOnlyEvents() {}
-	public void initializeManual() {}
-	public void clearClientKnowledge() {}
-	public TransmutationProps getClientTransmutationProps() { return null; }
-	public AlchBagProps getClientBagProps() { return null; }
-	public EntityPlayer getClientPlayer() { return null; }
-	public boolean isJumpPressed() { return false; }
+	@Override public void registerKeyBinds() {}
+	@Override public void registerRenderers() {}
+	@Override public void registerLayerRenderers() {}
+	@Override public void initializeManual() {}
+	@Override public void clearClientKnowledge() {}
+	@Override public IKnowledgeProvider getClientTransmutationProps() { return null; }
+	@Override public IAlchBagProvider getClientBagProps() { return null; }
+	@Override public EntityPlayer getClientPlayer() { return null; }
+	@Override public boolean isJumpPressed() { return false; }
 }

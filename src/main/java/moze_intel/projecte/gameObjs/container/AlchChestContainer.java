@@ -1,27 +1,34 @@
 package moze_intel.projecte.gameObjs.container;
 
 import invtweaks.api.container.ChestContainer;
+import moze_intel.projecte.gameObjs.ObjHandler;
 import moze_intel.projecte.gameObjs.tiles.AlchChestTile;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.items.CapabilityItemHandler;
+import net.minecraftforge.items.IItemHandler;
+import net.minecraftforge.items.SlotItemHandler;
+
+import javax.annotation.Nonnull;
 
 @ChestContainer(isLargeChest = true, rowSize = 13)
 public class AlchChestContainer extends Container
 {
-	private AlchChestTile tile;
+	private final AlchChestTile tile;
 	
 	public AlchChestContainer(InventoryPlayer invPlayer, AlchChestTile tile)
 	{
 		this.tile = tile;
-		tile.openInventory();
-		
+		tile.numPlayersUsing++;
+
+		IItemHandler inv = tile.getCapability(CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, null);
 		//Chest Inventory
 		for (int i = 0; i < 8; i++)
 			for (int j = 0; j < 13; j++)
-				this.addSlotToContainer(new Slot(tile, j + i * 13, 12 + j * 18, 5 + i * 18));
+				this.addSlotToContainer(new SlotItemHandler(inv, j + i * 13, 12 + j * 18, 5 + i * 18));
 		
 		//Player Inventory
 		for(int i = 0; i < 3; i++)
@@ -34,11 +41,13 @@ public class AlchChestContainer extends Container
 	}
 
 	@Override
-	public boolean canInteractWith(EntityPlayer player) 
+	public boolean canInteractWith(@Nonnull EntityPlayer player)
 	{
-		return player.getDistanceSq(tile.xCoord + 0.5, tile.yCoord + 0.5, tile.zCoord + 0.5) <= 64.0;
+		return player.world.getBlockState(tile.getPos()).getBlock() == ObjHandler.alchChest
+				&& player.getDistanceSq(tile.getPos().getX() + 0.5, tile.getPos().getY() + 0.5, tile.getPos().getZ() + 0.5) <= 64.0;
 	}
-	
+
+	@Nonnull
 	@Override
 	public ItemStack transferStackInSlot(EntityPlayer player, int slotIndex)
 	{
@@ -46,7 +55,7 @@ public class AlchChestContainer extends Container
 		
 		if (slot == null || !slot.getHasStack()) 
 		{
-			return null;
+			return ItemStack.EMPTY;
 		}
 		
 		ItemStack stack = slot.getStack();
@@ -56,17 +65,17 @@ public class AlchChestContainer extends Container
 		{
 			if (!this.mergeItemStack(stack, 104, this.inventorySlots.size(), false))
 			{
-				return null;
+				return ItemStack.EMPTY;
 			}
 		}
 		else if (!this.mergeItemStack(stack, 0, 104, false))
 		{
-			return null;
+			return ItemStack.EMPTY;
 		}
 		
-		if (stack.stackSize == 0)
+		if (stack.isEmpty())
 		{
-			slot.putStack((ItemStack)null);
+			slot.putStack(ItemStack.EMPTY);
 		}
 		else 
 		{
@@ -80,6 +89,6 @@ public class AlchChestContainer extends Container
 	public void onContainerClosed(EntityPlayer player)
 	{
 		super.onContainerClosed(player);
-		tile.closeInventory();
+		tile.numPlayersUsing--;
 	}
 }

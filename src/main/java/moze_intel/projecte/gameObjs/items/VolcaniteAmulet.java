@@ -3,9 +3,7 @@ package moze_intel.projecte.gameObjs.items;
 import baubles.api.BaubleType;
 import baubles.api.IBauble;
 import com.google.common.collect.Lists;
-import cpw.mods.fml.common.Optional;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
+import moze_intel.projecte.api.PESounds;
 import moze_intel.projecte.api.item.IPedestalItem;
 import moze_intel.projecte.api.item.IProjectileShooter;
 import moze_intel.projecte.config.ProjectEConfig;
@@ -17,26 +15,41 @@ import moze_intel.projecte.utils.FluidHelper;
 import moze_intel.projecte.utils.MathUtils;
 import moze_intel.projecte.utils.PEKeybind;
 import moze_intel.projecte.utils.PlayerHelper;
-import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.SharedMonsterAttributes;
+import net.minecraft.entity.ai.attributes.AttributeModifier;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.EnumChatFormatting;
-import net.minecraft.util.MovingObjectPosition;
-import net.minecraft.util.StatCollector;
+import net.minecraft.util.EnumActionResult;
+import net.minecraft.util.EnumFacing;
+import net.minecraft.util.EnumHand;
+import net.minecraft.util.SoundCategory;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.World;
+import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
-import net.minecraftforge.fluids.IFluidHandler;
+import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
+import net.minecraftforge.fml.common.Optional;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 
-@Optional.Interface(iface = "baubles.api.IBauble", modid = "Baubles")
+@Optional.Interface(iface = "baubles.api.IBauble", modid = "baubles")
 public class VolcaniteAmulet extends ItemPE implements IProjectileShooter, IBauble, IPedestalItem, IFireProtector
 {
+	private static final AttributeModifier SPEED_BOOST = new AttributeModifier("Walk on lava speed boost", 0.15, 0);
+
 	public VolcaniteAmulet()
 	{
 		this.setUnlocalizedName("volcanite_amulet");
@@ -44,213 +57,145 @@ public class VolcaniteAmulet extends ItemPE implements IProjectileShooter, IBaub
 		this.setContainerItem(this);
 	}
 
+	@Nonnull
 	@Override
-	public boolean onItemUse(ItemStack stack, EntityPlayer player, World world, int x, int y, int z, int sideHit, float f1, float f2, float f3)
+	public EnumActionResult onItemUse(EntityPlayer player, World world, BlockPos pos, EnumHand hand, EnumFacing sideHit, float f1, float f2, float f3)
 	{
-		if (!world.isRemote && PlayerHelper.hasEditPermission(((EntityPlayerMP) player), x, y, z))
+		if (!world.isRemote
+				&& PlayerHelper.hasEditPermission(((EntityPlayerMP) player), pos)
+				&& consumeFuel(player, player.getHeldItem(hand), 32, true))
 		{
-			TileEntity tile = world.getTileEntity(x, y, z);
+			TileEntity tile = world.getTileEntity(pos);
 
-			if (tile instanceof IFluidHandler)
+			if (tile != null && tile.hasCapability(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY, sideHit))
 			{
-				IFluidHandler tank = (IFluidHandler) tile;
-
-				if (FluidHelper.canFillTank(tank, FluidRegistry.LAVA, sideHit))
-				{
-					if (consumeFuel(player, stack, 32.0F, true))
-					{
-						FluidHelper.fillTank(tank, FluidRegistry.LAVA, sideHit, 1000);
-						return true;
-					}
-				}
+				FluidHelper.tryFillTank(tile, FluidRegistry.LAVA, sideHit, Fluid.BUCKET_VOLUME);
+			} else
+			{
+				placeLava(player, pos.offset(sideHit), hand);
+				world.playSound(null, player.posX, player.posY, player.posZ, PESounds.TRANSMUTE, SoundCategory.PLAYERS, 1.0F, 1.0F);
 			}
 		}
 
-		return false;
+		return EnumActionResult.SUCCESS;
 	}
 
-	@Override
-	public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player)
+	private void placeLava(EntityPlayer player, BlockPos pos, EnumHand hand)
 	{
-		if (!world.isRemote)
-		{
-			MovingObjectPosition mop = this.getMovingObjectPositionFromPlayer(world, player, false);
-			if (mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK)
-			{
-				int i = mop.blockX;
-				int j = mop.blockY;
-				int k = mop.blockZ;
-				if (!(world.getTileEntity(i, j, k) instanceof IFluidHandler))
-				{
-					switch(mop.sideHit) // Ripped from vanilla ItemBucket and simplified
-					{
-						case 0: --j; break;
-						case 1: ++j; break;
-						case 2: --k; break;
-						case 3: ++k; break;
-						case 4: --i; break;
-						case 5: ++i; break;
-						default: break;
-					}
-
-					if (world.isAirBlock(i, j, k) && consumeFuel(player, stack, 32, true))
-					{
-						placeLava(world, player, i, j, k);
-						world.playSoundAtEntity(player, "projecte:item.petransmute", 1.0F, 1.0F);
-						PlayerHelper.swingItem(player);
-					}
-				}
-			}
-		}
-
-		return stack;
-	}
-
-
-	private void placeLava(World world, EntityPlayer player, int i, int j, int k)
-	{
-		PlayerHelper.checkedPlaceBlock(((EntityPlayerMP) player), i, j, k, Blocks.flowing_lava, 0);
+		PlayerHelper.checkedPlaceBlock(((EntityPlayerMP) player), pos, Blocks.FLOWING_LAVA.getDefaultState(), hand);
 	}
 
 	@Override
 	public void onUpdate(ItemStack stack, World world, Entity entity, int invSlot, boolean par5)
 	{
-		if (invSlot > 8 || !(entity instanceof EntityPlayer)) return;
-		
-		EntityPlayer player = (EntityPlayer) entity;
-
-		int x = (int) Math.floor(player.posX);
-		int y = (int) (player.posY - player.getYOffset());
-		int z = (int) Math.floor(player.posZ);
-		
-		if ((world.getBlock(x, y - 1, z) == Blocks.lava || world.getBlock(x, y - 1, z) == Blocks.flowing_lava) && world.getBlock(x, y, z) == Blocks.air)
+		if (invSlot > 8 || !(entity instanceof EntityLivingBase))
 		{
-			if (!player.isSneaking())
+			return;
+		}
+
+		EntityLivingBase living = (EntityLivingBase) entity;
+
+		int x = (int) Math.floor(living.posX);
+		int y = (int) (living.posY - living.getYOffset());
+		int z = (int) Math.floor(living.posZ);
+		BlockPos pos = new BlockPos(x, y, z);
+
+		if ((world.getBlockState(pos.down()).getBlock() == Blocks.LAVA || world.getBlockState(pos.down()).getBlock() == Blocks.FLOWING_LAVA) && world.isAirBlock(pos))
+		{
+			if (!living.isSneaking())
 			{
-				player.motionY = 0.0D;
-				player.fallDistance = 0.0F;
-				player.onGround = true;
+				living.motionY = 0.0D;
+				living.fallDistance = 0.0F;
+				living.onGround = true;
 			}
-				
-			if (!world.isRemote && player.capabilities.getWalkSpeed() < 0.25F)
+
+			if (!world.isRemote && !living.getEntityAttribute(SharedMonsterAttributes.MOVEMENT_SPEED).hasModifier(SPEED_BOOST))
 			{
-				PlayerHelper.setPlayerWalkSpeed(player, 0.25F);
+				living.getEntityAttribute(SharedMonsterAttributes.MOVEMENT_SPEED).applyModifier(SPEED_BOOST);
 			}
 		}
 		else if (!world.isRemote)
 		{
-			if (player.capabilities.getWalkSpeed() != Constants.PLAYER_WALK_SPEED)
+			if (living.isInWater())
 			{
-				PlayerHelper.setPlayerWalkSpeed(player, Constants.PLAYER_WALK_SPEED);
+				living.setAir(300);
+			}
+
+			if (living.getEntityAttribute(SharedMonsterAttributes.MOVEMENT_SPEED).hasModifier(SPEED_BOOST))
+			{
+				living.getEntityAttribute(SharedMonsterAttributes.MOVEMENT_SPEED).removeModifier(SPEED_BOOST);
 			}
 		}
 	}
 	
 	@Override
-	public boolean doesContainerItemLeaveCraftingGrid(ItemStack stack)
+	public boolean shootProjectile(@Nonnull EntityPlayer player, @Nonnull ItemStack stack, EnumHand hand)
 	{
-		return false;
-	}
-	
-	@Override
-	public boolean shootProjectile(EntityPlayer player, ItemStack stack) 
-	{
-		player.worldObj.playSoundAtEntity(player, "projecte:item.petransmute", 1.0F, 1.0F);
-		player.worldObj.spawnEntityInWorld(new EntityLavaProjectile(player.worldObj, player));
+		player.getEntityWorld().playSound(null, player.posX, player.posY, player.posZ, PESounds.TRANSMUTE, SoundCategory.PLAYERS, 1, 1);
+		EntityLavaProjectile ent = new EntityLavaProjectile(player.getEntityWorld(), player);
+		ent.setHeadingFromThrower(player, player.rotationPitch, player.rotationYaw, 0, 1.5F, 1);
+		player.getEntityWorld().spawnEntity(ent);
 		return true;
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerIcons(IIconRegister register)
+	public void addInformation(ItemStack stack, @Nullable World world, List<String> list, ITooltipFlag flags)
 	{
-		this.itemIcon = register.registerIcon(this.getTexture("rings", "volcanite_amulet"));
-	}
-
-	@Override
-	@SideOnly(Side.CLIENT)
-	public void addInformation(ItemStack stack, EntityPlayer player, List list, boolean par4)
-	{
-		list.add(String.format(StatCollector.translateToLocal("pe.volcanite.tooltip1"), ClientKeyHelper.getKeyName(PEKeybind.FIRE_PROJECTILE)));
-		list.add(StatCollector.translateToLocal("pe.volcanite.tooltip2"));
-		list.add(StatCollector.translateToLocal("pe.volcanite.tooltip3"));
-		list.add(StatCollector.translateToLocal("pe.volcanite.tooltip4"));
+		list.add(I18n.format("pe.volcanite.tooltip1", ClientKeyHelper.getKeyName(PEKeybind.FIRE_PROJECTILE)));
+		list.add(I18n.format("pe.volcanite.tooltip2"));
+		list.add(I18n.format("pe.volcanite.tooltip3"));
+		list.add(I18n.format("pe.volcanite.tooltip4"));
 	}
 	
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public baubles.api.BaubleType getBaubleType(ItemStack itemstack)
 	{
 		return BaubleType.AMULET;
 	}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
-	public void onWornTick(ItemStack stack, EntityLivingBase ent) 
+	@Optional.Method(modid = "baubles")
+	public void onWornTick(ItemStack stack, EntityLivingBase ent)
 	{
-		if (!(ent instanceof EntityPlayer)) 
-		{
-			return;
-		}
-		
-		EntityPlayer player = (EntityPlayer) ent;
-		World world = player.worldObj;
-
-		int x = (int) Math.floor(player.posX);
-		int y = (int) (player.posY - player.getYOffset());
-		int z = (int) Math.floor(player.posZ);
-		
-		if ((world.getBlock(x, y - 1, z) == Blocks.lava || world.getBlock(x, y - 1, z) == Blocks.flowing_lava) && world.getBlock(x, y, z) == Blocks.air)
-		{
-			if (!player.isSneaking())
-			{
-				player.motionY = 0.0D;
-				player.fallDistance = 0.0F;
-				player.onGround = true;
-			}
-				
-			if (!world.isRemote && player.capabilities.getWalkSpeed() < 0.25F)
-			{
-				PlayerHelper.setPlayerWalkSpeed(player, 0.25F);
-			}
-		}
-		else if (!world.isRemote)
-		{
-			if (player.capabilities.getWalkSpeed() != Constants.PLAYER_WALK_SPEED)
-			{
-				PlayerHelper.setPlayerWalkSpeed(player, Constants.PLAYER_WALK_SPEED);
-			}
-		}
+		this.onUpdate(stack, ent.getEntityWorld(), ent, 0, false);
 	}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public void onEquipped(ItemStack itemstack, EntityLivingBase player) {}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public void onUnequipped(ItemStack itemstack, EntityLivingBase player) {}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public boolean canEquip(ItemStack itemstack, EntityLivingBase player) 
 	{
 		return true;
 	}
 
 	@Override
-	@Optional.Method(modid = "Baubles")
+	@Optional.Method(modid = "baubles")
 	public boolean canUnequip(ItemStack itemstack, EntityLivingBase player) 
 	{
 		return true;
 	}
 
 	@Override
-	public void updateInPedestal(World world, int x, int y, int z)
+	public void updateInPedestal(@Nonnull World world, @Nonnull BlockPos pos)
 	{
-		if (!world.isRemote && ProjectEConfig.volcanitePedCooldown != -1)
+		if (!world.isRemote && ProjectEConfig.pedestalCooldown.volcanitePedCooldown != -1)
 		{
-			DMPedestalTile tile = ((DMPedestalTile) world.getTileEntity(x, y, z));
+			TileEntity te = world.getTileEntity(pos);
+			if(!(te instanceof DMPedestalTile))
+			{
+				return;
+			}
+
+			DMPedestalTile tile = (DMPedestalTile) te;
 			if (tile.getActivityCooldown() == 0)
 			{
 				world.getWorldInfo().setRainTime(0);
@@ -258,7 +203,7 @@ public class VolcaniteAmulet extends ItemPE implements IProjectileShooter, IBaub
 				world.getWorldInfo().setRaining(false);
 				world.getWorldInfo().setThundering(false);
 
-				tile.setActivityCooldown(ProjectEConfig.volcanitePedCooldown);
+				tile.setActivityCooldown(ProjectEConfig.pedestalCooldown.volcanitePedCooldown);
 			}
 			else
 			{
@@ -267,14 +212,16 @@ public class VolcaniteAmulet extends ItemPE implements IProjectileShooter, IBaub
 		}
 	}
 
+	@Nonnull
+	@SideOnly(Side.CLIENT)
 	@Override
 	public List<String> getPedestalDescription()
 	{
-		List<String> list = Lists.newArrayList();
-		if (ProjectEConfig.volcanitePedCooldown != -1)
+		List<String> list = new ArrayList<>();
+		if (ProjectEConfig.pedestalCooldown.volcanitePedCooldown != -1)
 		{
-			list.add(EnumChatFormatting.BLUE + StatCollector.translateToLocal("pe.volcanite.pedestal1"));
-			list.add(EnumChatFormatting.BLUE + String.format(StatCollector.translateToLocal("pe.volcanite.pedestal2"), MathUtils.tickToSecFormatted(ProjectEConfig.volcanitePedCooldown)));
+			list.add(TextFormatting.BLUE + I18n.format("pe.volcanite.pedestal1"));
+			list.add(TextFormatting.BLUE + I18n.format("pe.volcanite.pedestal2", MathUtils.tickToSecFormatted(ProjectEConfig.pedestalCooldown.volcanitePedCooldown)));
 		}
 		return list;
 	}

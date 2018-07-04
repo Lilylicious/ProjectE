@@ -1,13 +1,21 @@
 package moze_intel.projecte.gameObjs.items;
 
-import cpw.mods.fml.common.FMLCommonHandler;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import moze_intel.projecte.gameObjs.gui.GUIManual;
-import net.minecraft.client.renderer.texture.IIconRegister;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.EnumActionResult;
+import net.minecraft.util.EnumHand;
 import net.minecraft.world.World;
+import net.minecraftforge.fml.common.FMLCommonHandler;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.List;
 
 public class PEManual extends ItemPE
 {
@@ -17,20 +25,22 @@ public class PEManual extends ItemPE
         this.setMaxStackSize(1);
     }
 
+    @Nonnull
     @Override
-    public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player)
+    public ActionResult<ItemStack> onItemRightClick(World world, EntityPlayer player, @Nonnull EnumHand hand)
     {
         if (world.isRemote)
         {
             FMLCommonHandler.instance().showGuiScreen(new GUIManual());
         }
-        return stack;
+        return ActionResult.newResult(EnumActionResult.SUCCESS, player.getHeldItem(hand));
     }
 
-    @Override
     @SideOnly(Side.CLIENT)
-    public void registerIcons(IIconRegister register)
+    @Override
+    public void addInformation(ItemStack stack, @Nullable World world, List<String> tooltip, ITooltipFlag flags)
     {
-        this.itemIcon = register.registerIcon(this.getTexture("book"));
+        tooltip.add(I18n.format("pe.manual.tooltip1"));
     }
+
 }

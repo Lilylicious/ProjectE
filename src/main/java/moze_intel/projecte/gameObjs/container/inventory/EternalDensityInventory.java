@@ -2,184 +2,102 @@ package moze_intel.projecte.gameObjs.container.inventory;
 
 import moze_intel.projecte.network.PacketHandler;
 import moze_intel.projecte.network.packets.UpdateGemModePKT;
+import moze_intel.projecte.utils.ItemHelper;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.nbt.NBTTagList;
-import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraftforge.common.util.Constants;
+import net.minecraftforge.items.CapabilityItemHandler;
+import net.minecraftforge.items.IItemHandlerModifiable;
+import net.minecraftforge.items.ItemStackHandler;
 
-public class EternalDensityInventory implements IInventory
+import javax.annotation.Nonnull;
+
+public class EternalDensityInventory implements IItemHandlerModifiable
 {
-	private ItemStack inventory[];
-	private EntityPlayer player;
+	private final IItemHandlerModifiable inventory = new ItemStackHandler(9);
 	private boolean isInWhitelist;
-	
-	public EternalDensityInventory(ItemStack stack, EntityPlayer player) 
+	public final ItemStack invItem;
+
+	public EternalDensityInventory(ItemStack stack, EntityPlayer player)
 	{
-		inventory = new ItemStack[9];
-		
-		if (!stack.hasTagCompound())
-		{
-			stack.setTagCompound(new NBTTagCompound());
-		}
-		
-		readFromNBT(stack.stackTagCompound);
-		
-		this.player = player;
+		this.invItem = stack;
+		readFromNBT(ItemHelper.getOrCreateCompound(stack));
 	}
-	
 
 	@Override
-	public int getSizeInventory()
+	public int getSlots()
 	{
-		return 9;
+		return inventory.getSlots();
 	}
 
+	@Nonnull
 	@Override
 	public ItemStack getStackInSlot(int slot) 
 	{
-		return inventory[slot];
+		return inventory.getStackInSlot(slot);
+	}
+
+	@Nonnull
+	@Override
+	public ItemStack insertItem(int slot, @Nonnull ItemStack stack, boolean simulate)
+	{
+		ItemStack ret = inventory.insertItem(slot, stack, simulate);
+		writeBack();
+		return ret;
+	}
+
+	@Nonnull
+	@Override
+	public ItemStack extractItem(int slot, int amount, boolean simulate)
+	{
+		ItemStack ret = inventory.extractItem(slot, amount, simulate);
+		writeBack();
+		return ret;
 	}
 
 	@Override
-	public ItemStack decrStackSize(int slot, int num) 
+	public int getSlotLimit(int slot)
 	{
-		ItemStack stack = getStackInSlot(slot);
-		
-		if(stack != null)
+		return 1;
+	}
+
+	@Override
+	public void setStackInSlot(int slot, @Nonnull ItemStack stack)
+	{
+		inventory.setStackInSlot(slot, stack);
+		writeBack();
+	}
+
+	private void writeBack()
+	{
+		for (int i = 0; i < inventory.getSlots(); ++i)
 		{
-			if(stack.stackSize > num)
+			if (inventory.getStackInSlot(i).isEmpty())
 			{
-				stack = stack.splitStack(num);
-				markDirty();
-			}
-			else
-			{
-				setInventorySlotContents(slot, null);
-			}
-		}
-		
-		return stack;
-	}
-
-	@Override
-	public ItemStack getStackInSlotOnClosing(int slot) 
-	{
-		ItemStack stack = getStackInSlot(slot);
-		
-		if(stack != null)
-		{
-			setInventorySlotContents(slot, null);
-		}
-		
-		return stack;
-	}
-
-	@Override
-	public void setInventorySlotContents(int slot, ItemStack stack) 
-	{
-		this.inventory[slot] = stack;
-
-		if (stack != null && stack.stackSize > this.getInventoryStackLimit())
-		{
-			stack.stackSize = this.getInventoryStackLimit();
-		}
-		
-		markDirty();
-	}
-
-	@Override
-	public String getInventoryName() 
-	{
-		return null;
-	}
-
-	@Override
-	public boolean hasCustomInventoryName() 
-	{
-		return false;
-	}
-
-	@Override
-	public int getInventoryStackLimit() 
-	{
-		return 64;
-	}
-
-	@Override
-	public void markDirty() 
-	{
-		for (int i = 0; i < inventory.length; ++i)
-		{
-			if (inventory[i] != null && inventory[i].stackSize == 0)
-			{
-				inventory[i] = null;
+				inventory.setStackInSlot(i, ItemStack.EMPTY);
 			}
 		}
-		
-		if (player.getHeldItem() != null)
-		{
-			writeToNBT(player.getHeldItem().stackTagCompound);
-		}
+
+		writeToNBT(invItem.getTagCompound());
 	}
 
-	@Override
-	public boolean isUseableByPlayer(EntityPlayer player) 
-	{
-		return true;
-	}
-
-	@Override
-	public void openInventory() {}
-
-	@Override
-	public void closeInventory() {}
-
-	@Override
-	public boolean isItemValidForSlot(int slot, ItemStack stack) 
-	{
-		return true;
-	}
-	
 	public void readFromNBT(NBTTagCompound nbt)
 	{
 		isInWhitelist = nbt.getBoolean("Whitelist");
-		
-		NBTTagList items = nbt.getTagList("Items", NBT.TAG_COMPOUND);
-		
-		for (int i = 0; i < items.tagCount(); i++)
-		{
-			NBTTagCompound tag = items.getCompoundTagAt(i);
-			
-			inventory[tag.getByte("Slot")] = ItemStack.loadItemStackFromNBT(tag);
-		}
+		CapabilityItemHandler.ITEM_HANDLER_CAPABILITY.readNBT(inventory, null, nbt.getTagList("Items", Constants.NBT.TAG_COMPOUND));
 	}
 	
 	public void writeToNBT(NBTTagCompound nbt)
 	{
 		nbt.setBoolean("Whitelist", isInWhitelist);
-		
-		NBTTagList items = new NBTTagList();
-		
-		for (int i = 0; i < inventory.length; i++)
-		{
-			if (inventory[i] != null)
-			{
-				NBTTagCompound tag = new NBTTagCompound();
-				tag.setByte("Slot", (byte) i);
-				inventory[i].writeToNBT(tag);
-				items.appendTag(tag);
-			}
-		}
-		
-		nbt.setTag("Items", items);
+		nbt.setTag("Items", CapabilityItemHandler.ITEM_HANDLER_CAPABILITY.writeNBT(inventory, null));
 	}
 	
 	public void changeMode()
 	{
 		isInWhitelist = !isInWhitelist;
-		markDirty();
+		writeBack();
 		
 		PacketHandler.sendToServer(new UpdateGemModePKT(isInWhitelist));
 	}
@@ -187,17 +105,5 @@ public class EternalDensityInventory implements IInventory
 	public boolean isWhitelistMode()
 	{
 		return isInWhitelist;
-	}
-
-	public int findFirstEmptySlot()
-	{
-		for (int i = 0; i < inventory.length; i++)
-		{
-			if (inventory[i] == null)
-			{
-				return i;
-			}
-		}
-		return -1;
 	}
 }

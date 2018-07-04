@@ -1,171 +1,174 @@
 package moze_intel.projecte.gameObjs.container.inventory;
 
-import com.google.common.collect.Lists;
-
-import moze_intel.projecte.emc.EMCMapper;
+import moze_intel.projecte.api.ProjectEAPI;
+import moze_intel.projecte.api.capabilities.IKnowledgeProvider;
 import moze_intel.projecte.emc.FuelMapper;
-import moze_intel.projecte.gameObjs.ObjHandler;
-import moze_intel.projecte.network.PacketHandler;
-import moze_intel.projecte.network.packets.SearchUpdatePKT;
-import moze_intel.projecte.playerData.Transmutation;
-import moze_intel.projecte.utils.Comparators;
 import moze_intel.projecte.utils.Constants;
 import moze_intel.projecte.utils.EMCHelper;
 import moze_intel.projecte.utils.ItemHelper;
 import moze_intel.projecte.utils.ItemSearchHelper;
 import moze_intel.projecte.utils.NBTWhitelist;
-import moze_intel.projecte.utils.PELogger;
-
-import com.google.common.collect.Queues;
+import moze_intel.projecte.utils.PlayerHelper;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.inventory.IInventory;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.math.MathHelper;
+import net.minecraftforge.items.IItemHandlerModifiable;
+import net.minecraftforge.items.ItemStackHandler;
+import net.minecraftforge.items.wrapper.CombinedInvWrapper;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
 
-public class TransmutationInventory implements IInventory
+public class TransmutationInventory extends CombinedInvWrapper
 {
-	public double emc;
-	private EntityPlayer player = null;
+	public final EntityPlayer player;
+	public final IKnowledgeProvider provider;
+	private final IItemHandlerModifiable inputLocks;
+	private final IItemHandlerModifiable learning;
+	public final IItemHandlerModifiable outputs;
+
 	private static final int LOCK_INDEX = 8;
-	private static final int[] MATTER_INDEXES = new int[] {12, 11, 13, 10, 14, 21, 15, 20, 16, 19, 17, 18};
-	private static final int[] FUEL_INDEXES = new int[] {22, 23, 24, 25};
-	private ItemStack[] inventory = new ItemStack[27];
+	private static final int FUEL_START = 12;
 	public int learnFlag = 0;
 	public int unlearnFlag = 0;
 	public String filter = "";
 	public int searchpage = 0;
-	public List<ItemStack> knowledge = Lists.newArrayList();
+	public final List<ItemStack> knowledge = new ArrayList<>();
 	
 	public TransmutationInventory(EntityPlayer player)
 	{
+		super((IItemHandlerModifiable) player.getCapability(ProjectEAPI.KNOWLEDGE_CAPABILITY, null).getInputAndLocks(),
+				new ItemStackHandler(2), new ItemStackHandler(16));
+
 		this.player = player;
+		this.provider = player.getCapability(ProjectEAPI.KNOWLEDGE_CAPABILITY, null);
+
+		this.inputLocks = itemHandler[0];
+		this.learning = itemHandler[1];
+		this.outputs = itemHandler[2];
+
+		if (player.getEntityWorld().isRemote)
+		{
+			updateClientTargets();
+		}
 	}
 	
 	public void handleKnowledge(ItemStack stack)
 	{
-		if (stack.stackSize > 1)
+		if (stack.getCount() > 1)
 		{
-			stack.stackSize = 1;
+			stack.setCount(1);
 		}
 		
-		if (!stack.getHasSubtypes() && stack.getMaxDamage() != 0 && stack.getItemDamage() != 0)
+		if (ItemHelper.isDamageable(stack))
 		{
 			stack.setItemDamage(0);
 		}
 		
-		if (!Transmutation.hasKnowledgeForStack(stack, player))
+		if (!provider.hasKnowledge(stack))
 		{
 			learnFlag = 300;
-			
-			if (stack.getItem() == ObjHandler.tome)
-			{
-				Transmutation.setFullKnowledge(player);
-			}
-			else
-			{
-				if (stack.hasTagCompound() && !NBTWhitelist.shouldDupeWithNBT(stack))
-				{
-					stack.stackTagCompound = null;
-				}
+			unlearnFlag = 0;
 
-				Transmutation.addKnowledge(stack, player);
-			}
-			
-			if (!player.worldObj.isRemote)
+			if (stack.hasTagCompound() && !NBTWhitelist.shouldDupeWithNBT(stack))
 			{
-				Transmutation.sync(player);
+				stack.setTagCompound(null);
+			}
+
+			provider.addKnowledge(stack);
+			
+			if (!player.getEntityWorld().isRemote)
+			{
+				provider.sync(((EntityPlayerMP) player));
 			}
 		}
 		
-		updateOutputs();
+		updateClientTargets();
 	}
 
 	public void handleUnlearn(ItemStack stack)
 	{
-		if (stack.stackSize > 1)
+		if (stack.getCount() > 1)
 		{
-			stack.stackSize = 1;
+			stack.setCount(1);
 		}
 
-		if (!stack.getHasSubtypes() && stack.getMaxDamage() != 0 && stack.getItemDamage() != 0)
+		if (ItemHelper.isDamageable(stack))
 		{
 			stack.setItemDamage(0);
 		}
-		
-		if (Transmutation.hasKnowledgeForStack(stack, player))
+
+		if (provider.hasKnowledge(stack))
 		{
 			unlearnFlag = 300;
+			learnFlag = 0;
 
 			if (stack.hasTagCompound() && !NBTWhitelist.shouldDupeWithNBT(stack))
 			{
-				stack.stackTagCompound = null;
+				stack.setTagCompound(null);
 			}
 
-			Transmutation.removeKnowledge(stack, player);
+			provider.removeKnowledge(stack);
 			
-			if (!player.worldObj.isRemote)
+			if (!player.getEntityWorld().isRemote)
 			{
-				Transmutation.sync(player);
+				provider.sync(((EntityPlayerMP) player));
 			}
 		}
 		
-		updateOutputs();
+		updateClientTargets();
 	}
 	
 	public void checkForUpdates()
 	{
-		int matterEmc = EMCHelper.getEmcValue(inventory[MATTER_INDEXES[0]]);
-		int fuelEmc = EMCHelper.getEmcValue(inventory[FUEL_INDEXES[0]]);
+		int matterEmc = EMCHelper.getEmcValue(outputs.getStackInSlot(0));
+		int fuelEmc = EMCHelper.getEmcValue(outputs.getStackInSlot(FUEL_START));
 		
-		int maxEmc = matterEmc > fuelEmc ? matterEmc : fuelEmc;
-		
-		if (maxEmc > emc)
+		if (Math.max(matterEmc, fuelEmc) > provider.getEmc())
 		{
-			updateOutputs();
+			updateClientTargets();
 		}
 	}
 
-	public void updateOutputs() {
-		updateOutputs(false);
-	}
-	@SuppressWarnings("unchecked")
-	public void updateOutputs(boolean async)
+	public void updateClientTargets()
 	{
-		if (!this.player.worldObj.isRemote) {
+		if (!this.player.getEntityWorld().isRemote)
+		{
 			return;
 		}
-		knowledge = Lists.newArrayList(Transmutation.getKnowledge(player));
 
-		for (int i : MATTER_INDEXES)
-		{
-			inventory[i] = null;
-		}
-		
-		for (int i : FUEL_INDEXES)
-		{
-			inventory[i] = null;
-		}
-		
-		ItemStack lockCopy = null;
+		knowledge.clear();
+		knowledge.addAll(provider.getKnowledge());
 
-		Collections.sort(knowledge, Comparators.ITEMSTACK_EMC_DESCENDING);
+		for (int i = 0; i < outputs.getSlots(); i++)
+		{
+			outputs.setStackInSlot(i, ItemStack.EMPTY);
+		}
+
+		ItemStack lockCopy = ItemStack.EMPTY;
+
+		knowledge.sort(Collections.reverseOrder(Comparator.comparing(EMCHelper::getEmcValue)));
 		ItemSearchHelper searchHelper = ItemSearchHelper.create(filter);
-		if (inventory[LOCK_INDEX] != null)
+		if (!inputLocks.getStackInSlot(LOCK_INDEX).isEmpty())
 		{
-			int reqEmc = EMCHelper.getEmcValue(inventory[LOCK_INDEX]);
+			lockCopy = ItemHelper.getNormalizedStack(inputLocks.getStackInSlot(LOCK_INDEX));
+
+			if (ItemHelper.isDamageable(lockCopy))
+			{
+				lockCopy.setItemDamage(0);
+			}
+
+			int reqEmc = EMCHelper.getEmcValue(inputLocks.getStackInSlot(LOCK_INDEX));
 			
-			if (this.emc < reqEmc)
+			if (provider.getEmc() < reqEmc)
 			{
 				return;
 			}
-
-			lockCopy = ItemHelper.getNormalizedStack(inventory[LOCK_INDEX]);
 
 			if (lockCopy.hasTagCompound() && !NBTWhitelist.shouldDupeWithNBT(lockCopy))
 			{
@@ -200,7 +203,6 @@ public class TransmutationInventory implements IInventory
 				{
 					pagecounter++;
 					iter.remove();
-					continue;
 				}
 			}
 		}
@@ -213,7 +215,7 @@ public class TransmutationInventory implements IInventory
 			{
 				ItemStack stack = iter.next();
 				
-				if (emc < EMCHelper.getEmcValue(stack))
+				if (provider.getEmc() < EMCHelper.getEmcValue(stack))
 				{
 					iter.remove();
 					continue;
@@ -228,7 +230,6 @@ public class TransmutationInventory implements IInventory
 				{
 					pagecounter++;
 					iter.remove();
-					continue;
 				}
 			}
 		}
@@ -236,16 +237,16 @@ public class TransmutationInventory implements IInventory
 		int matterCounter = 0;
 		int fuelCounter = 0;
 
-		if (lockCopy != null)
+		if (!lockCopy.isEmpty())
 		{
 			if (FuelMapper.isStackFuel(lockCopy))
 			{
-				inventory[FUEL_INDEXES[0]] = lockCopy;
+				outputs.setStackInSlot(FUEL_START, lockCopy);
 				fuelCounter++;
 			}
 			else
 			{
-				inventory[MATTER_INDEXES[0]] = lockCopy;
+				outputs.setStackInSlot(0, lockCopy);
 				matterCounter++;
 			}
 		}
@@ -256,8 +257,8 @@ public class TransmutationInventory implements IInventory
 			{
 				if (fuelCounter < 4)
 				{
-					inventory[FUEL_INDEXES[fuelCounter]] = stack;
-				
+					outputs.setStackInSlot(FUEL_START + fuelCounter, stack);
+
 					fuelCounter++;
 				}
 			}
@@ -265,8 +266,8 @@ public class TransmutationInventory implements IInventory
 			{
 				if (matterCounter < 12)
 				{
-					inventory[MATTER_INDEXES[matterCounter]] = stack;
-					
+					outputs.setStackInSlot(matterCounter, stack);
+
 					matterCounter++;
  				}
 			}
@@ -276,158 +277,69 @@ public class TransmutationInventory implements IInventory
 	public void writeIntoOutputSlot(int slot, ItemStack item)
 	{
 
-		if (EMCHelper.doesItemHaveEmc(item) && EMCHelper.getEmcValue(item) <= this.emc && Transmutation.hasKnowledgeForStack(item, player))
+		if (EMCHelper.doesItemHaveEmc(item)
+				&& EMCHelper.getEmcValue(item) <= provider.getEmc()
+				&& provider.hasKnowledge(item))
 		{
-			inventory[slot] = item;
+			outputs.setStackInSlot(slot, item);
 		}
 		else
 		{
-			inventory[slot] = null;
+			outputs.setStackInSlot(slot, ItemStack.EMPTY);
 		}
 	}
 
-	public List<ItemStack> getOutputSlots() {
-		return Arrays.asList(inventory).subList(10,26);
-	}
-	
-	@Override
-	public int getSizeInventory() 
-	{
-		return 26;
-	}
-
-	@Override
-	public ItemStack getStackInSlot(int slot) 
-	{
-		return inventory[slot];
-	}
-
-	@Override
-	public ItemStack decrStackSize(int slot, int qty) 
-	{
-		ItemStack stack = inventory[slot];
-		if (stack != null)
-		{
-			if (stack.stackSize <= qty)
-			{
-				inventory[slot] = null;
-			}
-			else
-			{
-				stack = stack.splitStack(qty);
-				if (stack.stackSize == 0)
-				{
-					inventory[slot] = null;
-				}
-			}
-		}
-		return stack;
-	}
-
-	@Override
-	public ItemStack getStackInSlotOnClosing(int slot) 
-	{
-		if (inventory[slot] != null)
-		{
-			ItemStack stack = inventory[slot];
-			inventory[slot] = null;
-			return stack;
-		}
-		
-		return null;
-	}
-
-	@Override
-	public void setInventorySlotContents(int slot, ItemStack stack) 
-	{
-		inventory[slot] = stack;
-		
-		if (stack != null && stack.stackSize > this.getInventoryStackLimit())
-		{
-			stack.stackSize = this.getInventoryStackLimit();
-		}
-		
-		this.markDirty();
-	}
-
-	@Override
-	public String getInventoryName() 
-	{
-		return "item.pe_transmutation_tablet.name";
-	}
-
-	@Override
-	public boolean hasCustomInventoryName() 
-	{
-		return false;
-	}
-
-	@Override
-	public int getInventoryStackLimit() 
-	{
-		return 64;
-	}
-
-	@Override
-	public boolean isUseableByPlayer(EntityPlayer var1) 
-	{
-		return true;
-	}
-
-	@Override
-	public void openInventory() 
-	{
-		emc = Transmutation.getEmc(player);
-		ItemStack[] inputLocks = Transmutation.getInputsAndLock(player);
-		System.arraycopy(inputLocks, 0, inventory, 0, 9);
-		if (this.player.worldObj.isRemote)
-		{
-			updateOutputs(true);
-		}
-	}
-
-	@Override
-	public void closeInventory()
-	{
-		if (!player.worldObj.isRemote)
-		{
-			Transmutation.setEmc(player, emc);
-			Transmutation.setInputsAndLocks(Arrays.copyOfRange(inventory, 0, 9), player);
-			Transmutation.sync(player);
-		}
-	}
-
-	@Override
-	public boolean isItemValidForSlot(int slot, ItemStack stack) 
-	{
-		return false;
-	}
-
-	@Override
-	public void markDirty() {}
-	
 	public void addEmc(double value)
 	{
-		emc += value;
+		provider.setEmc(provider.getEmc() + value);
 		
-		if (emc >= Constants.TILE_MAX_EMC || emc < 0)
+		if (provider.getEmc() >= Constants.TILE_MAX_EMC || provider.getEmc() < 0)
 		{
-			emc = Constants.TILE_MAX_EMC;
+			provider.setEmc(Constants.TILE_MAX_EMC);
+		}
+
+		if (!player.getEntityWorld().isRemote)
+		{
+			PlayerHelper.updateScore((EntityPlayerMP) player, PlayerHelper.SCOREBOARD_EMC, MathHelper.floor(provider.getEmc()));
 		}
 	}
 	
 	public void removeEmc(double value) 
 	{
-		emc -= value;
+		provider.setEmc(provider.getEmc() - value);
 		
-		if (emc < 0)
+		if (provider.getEmc() < 0)
 		{
-			emc = 0;
+			provider.setEmc(0);
+		}
+
+		if (!player.getEntityWorld().isRemote)
+		{
+			PlayerHelper.updateScore((EntityPlayerMP) player, PlayerHelper.SCOREBOARD_EMC, MathHelper.floor(provider.getEmc()));
 		}
 	}
 
 	public boolean hasMaxedEmc()
 	{
-		return emc >= Constants.TILE_MAX_EMC;
+		return provider.getEmc() >= Constants.TILE_MAX_EMC;
 	}
+
+	public IItemHandlerModifiable getHandlerForSlot(int slot)
+	{
+		return super.getHandlerFromIndex(super.getIndexForSlot(slot));
+	}
+
+	public int getIndexFromSlot(int slot)
+	{
+		for (IItemHandlerModifiable h : itemHandler)
+		{
+			if (slot >= h.getSlots())
+			{
+				slot -= h.getSlots();
+			}
+		}
+
+		return slot;
+	}
+
 }

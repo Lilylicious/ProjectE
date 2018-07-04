@@ -1,20 +1,28 @@
 package moze_intel.projecte.utils;
 
 import com.google.common.collect.Lists;
-import moze_intel.projecte.gameObjs.entity.EntityLootBall;
-import net.minecraft.block.Block;
-import net.minecraft.entity.player.InventoryPlayer;
+import moze_intel.projecte.PECore;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.init.Blocks;
-import net.minecraft.inventory.IInventory;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
+import net.minecraft.init.Items;
+import net.minecraft.item.*;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.nbt.NBTTagList;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.NonNullList;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.items.IItemHandler;
+import net.minecraftforge.items.IItemHandlerModifiable;
+import net.minecraftforge.items.ItemHandlerHelper;
 import net.minecraftforge.oredict.OreDictionary;
 
-import java.util.Collections;
-import java.util.Iterator;
+import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Helpers for Inventories, ItemStacks, Items, and the Ore Dictionary
@@ -51,32 +59,22 @@ public final class ItemHelper
 		return (stack1.getItem() == stack2.getItem()) && (stack1.getItemDamage() == stack2.getItemDamage());
 	}
 
-	public static void compactItemList(List<ItemStack> list)
+	public static void compactInventory(IItemHandlerModifiable inventory)
 	{
-		for (int i = 0; i < list.size(); i++)
+		List<ItemStack> temp = new ArrayList<>();
+		for (int i = 0; i < inventory.getSlots(); i++)
 		{
-			ItemStack s = list.get(i);
-			for (int j = i + 1; j < list.size(); j++)
+			if (!inventory.getStackInSlot(i).isEmpty())
 			{
-				ItemStack s1 = list.get(j);
-				if (areItemStacksEqual(s, s1))
-				{
-					if (s.stackSize + s1.stackSize <= s.getMaxStackSize())
-					{
-						s.stackSize += s1.stackSize;
-						s1.stackSize = 0;
-					}
-					else
-					{
-						s1.stackSize = (s1.stackSize + s.stackSize) - s.getMaxStackSize();
-						s.stackSize = s.getMaxStackSize();
-					}
-				}
+				temp.add(inventory.getStackInSlot(i));
+				inventory.setStackInSlot(i, ItemStack.EMPTY);
 			}
 		}
 
-		Collections.sort(list, Comparators.ITEMSTACK_ASCENDING);
-		trimItemList(list);
+		for (ItemStack s : temp)
+		{
+			ItemHandlerHelper.insertItemStacked(inventory, s, false);
+		}
 	}
 
 	/**
@@ -87,25 +85,28 @@ public final class ItemHelper
 		for (int i = 0; i < list.size(); i++)
 		{
 			ItemStack s = list.get(i);
-			for (int j = i + 1; j < list.size(); j++)
+			if (!s.isEmpty())
 			{
-				ItemStack s1 = list.get(j);
-				if (areItemStacksEqual(s, s1))
+				for (int j = i + 1; j < list.size(); j++)
 				{
-					s.stackSize += s1.stackSize;
-					s1.stackSize = 0;
+					ItemStack s1 = list.get(j);
+					if (ItemHandlerHelper.canItemStacksStack(s, s1))
+					{
+						s.grow(s1.getCount());
+						list.set(j, ItemStack.EMPTY);
+					}
 				}
 			}
 		}
 
-		Collections.sort(list, Comparators.ITEMSTACK_ASCENDING);
-		trimItemList(list);
+		list.removeIf(ItemStack::isEmpty);
+		list.sort(Comparators.ITEMSTACK_ASCENDING);
 	}
 
 	public static boolean containsItemStack(List<ItemStack> list, ItemStack toSearch)
 	{
 		for (ItemStack stack : list) {
-			if (stack == null) {
+			if (stack.isEmpty()) {
 				continue;
 			}
 
@@ -118,104 +119,34 @@ public final class ItemHelper
 		return false;
 	}
 
-	public static boolean containsItemStack(ItemStack[] stacks, ItemStack toSearch)
-	{
-		for (ItemStack stack : stacks)
-		{
-			if (stack == null)
-			{
-				continue;
-			}
-
-			if (stack.getItem() == toSearch.getItem())
-			{
-				if (!stack.getHasSubtypes() || stack.getItemDamage() == toSearch.getItemDamage())
-				{
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Copy an NBTTagList that has inventory indices into the appropriate positions of provided array.
-	 */
-	public static ItemStack[] copyIndexedNBTToArray(NBTTagList list, ItemStack[] dest)
-	{
-		for (int i = 0; i < list.tagCount(); i++)
-		{
-			NBTTagCompound entry = list.getCompoundTagAt(i);
-			dest[entry.getByte("index")] = ItemStack.loadItemStackFromNBT(entry);
-		}
-		return dest;
-	}
-
 	/**
 	 * Returns an ItemStack with stacksize 1.
 	 */
 	public static ItemStack getNormalizedStack(ItemStack stack)
 	{
 		ItemStack result = stack.copy();
-		result.stackSize = 1;
+		result.setCount(1);
 		return result;
 	}
 
 	/**
-	 * Get a List of itemstacks from an OD name.<br>
-	 * It also makes sure that no items with damage 32767 are included, to prevent errors.
+	 * Get a List of itemstacks from an OD name, exploding any wildcard values into their subvariants
+	 * TODO 1.13 tags
 	 */
 	public static List<ItemStack> getODItems(String oreName)
 	{
-		List<ItemStack> result = Lists.newArrayList();
+		NonNullList<ItemStack> result = NonNullList.create();
 
 		for (ItemStack stack : OreDictionary.getOres(oreName))
 		{
-			if (stack == null)
+			if (stack.isEmpty())
 			{
 				continue;
 			}
 
 			if (stack.getItemDamage() == OreDictionary.WILDCARD_VALUE)
 			{
-				List<ItemStack> list = Lists.newArrayList();
-
-				ItemStack copy = stack.copy();
-				copy.setItemDamage(0);
-
-				list.add(copy.copy());
-
-				String startName = copy.getUnlocalizedName();
-
-				for (int i = 1; i <= 128; i++)
-				{
-					try
-					{
-						copy.setItemDamage(i);
-
-						if (copy.getUnlocalizedName() == null || copy.getUnlocalizedName().equals(startName))
-						{
-							result.addAll(list);
-							break;
-						}
-					}
-					catch (Exception e)
-					{
-						PELogger.logFatal("Couldn't retrieve OD items for: " + oreName);
-						PELogger.logFatal("Caused by: " + e.toString());
-
-						result.addAll(list);
-						break;
-					}
-
-					list.add(copy.copy());
-
-					if (i == 128)
-					{
-						copy.setItemDamage(0);
-						result.add(copy);
-					}
-				}
+				stack.getItem().getSubItems(CreativeTabs.SEARCH, result);
 			}
 			else
 			{
@@ -226,8 +157,22 @@ public final class ItemHelper
 		return result;
 	}
 
+	public static NBTTagCompound getOrCreateCompound(ItemStack stack)
+	{
+		if (!stack.hasTagCompound())
+		{
+			stack.setTagCompound(new NBTTagCompound());
+		}
+
+		return stack.getTagCompound();
+	}
+
 	public static String getOreDictionaryName(ItemStack stack)
 	{
+		if (stack.isEmpty())
+		{
+			return "Unknown";
+		}
 		int[] oreIds = OreDictionary.getOreIDs(stack);
 
 		if (oreIds.length == 0)
@@ -238,89 +183,16 @@ public final class ItemHelper
 		return OreDictionary.getOreName(oreIds[0]);
 	}
 
-	public static ItemStack getStackFromInv(IInventory inv, ItemStack stack)
-	{
-		for (int i = 0; i < inv.getSizeInventory(); i++)
-		{
-			ItemStack s = inv.getStackInSlot(i);
-
-			if (s == null)
-			{
-				continue;
-			}
-
-			if (basicAreStacksEqual(stack, s))
-			{
-				return s;
-			}
-		}
-
-		return null;
-	}
-
-	public static ItemStack getStackFromInv(ItemStack[] inv, ItemStack stack)
-	{
-		for (ItemStack s : inv)
-		{
-			if (s == null)
-			{
-				continue;
-			}
-
-			if (basicAreStacksEqual(stack, s))
-			{
-				return s;
-			}
-		}
-
-		return null;
-	}
-
-	/**
-	 *	@throws NullPointerException
-	 */
-	public static ItemStack getStackFromString(String internal, int metaData)
-	{
-		Item item = (Item) Item.itemRegistry.getObject(internal);
-
-		if (item == null)
-		{
-			return null;
-		}
-
-		return new ItemStack(item, 1, metaData);
-	}
-
-	public static boolean hasSpace(IInventory inv, ItemStack stack)
-	{
-		for (int i = 0; i < inv.getSizeInventory(); i++)
-		{
-			ItemStack invStack = inv.getStackInSlot(i);
-
-			if (invStack == null)
-			{
-				return true;
-			}
-
-			if (areItemStacksEqual(stack, invStack) && invStack.stackSize < invStack.getMaxStackSize())
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	public static boolean hasSpace(ItemStack[] inv, ItemStack stack)
+	public static boolean hasSpace(NonNullList<ItemStack> inv, ItemStack stack)
 	{
 		for (ItemStack invStack : inv)
 		{
-			if (invStack == null)
+			if (invStack.isEmpty())
 			{
 				return true;
 			}
 
-			if (areItemStacksEqual(stack, invStack) && invStack.stackSize < invStack.getMaxStackSize())
+			if (areItemStacksEqual(stack, invStack) && invStack.getCount() < invStack.getMaxStackSize())
 			{
 				return true;
 			}
@@ -329,190 +201,110 @@ public final class ItemHelper
 		return false;
 	}
 
-	public static boolean invContainsItem(IInventory inv, ItemStack toSearch)
+	public static boolean isItemRepairable(ItemStack stack)
 	{
-		for (int i = 0; i < inv.getSizeInventory(); i++)
+		if (stack.getHasSubtypes())
 		{
-			ItemStack stack = inv.getStackInSlot(i);
-
-			if (stack != null && basicAreStacksEqual(stack, toSearch))
-			{
-				return true;
-			}
+			return false;
 		}
-		return false;
-	}
 
-	public static boolean invContainsItem(ItemStack inv[], ItemStack toSearch)
-	{
-		for (ItemStack stack : inv)
+		if (stack.getMaxDamage() == 0 || stack.getItemDamage() == 0)
 		{
-			if (stack != null && basicAreStacksEqual(stack, toSearch))
-			{
-				return true;
-			}
+			return false;
 		}
 
-		return false;
-	}
+		Item item = stack.getItem();
 
-	public static boolean invContainsItem(ItemStack inv[], Item toSearch)
-	{
-		for (ItemStack stack : inv)
-		{
-			if (stack != null && stack.getItem() == toSearch)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	public static boolean isOre(Block block, int meta)
-	{
-		if (block == Blocks.lit_redstone_ore)
+		if (item instanceof ItemShears || item instanceof ItemFlintAndSteel || item instanceof ItemFishingRod || item instanceof ItemBow)
 		{
 			return true;
 		}
-		String oreDictName = getOreDictionaryName(new ItemStack(block, 1, meta));
+
+		return (item instanceof ItemTool || item instanceof ItemSword || item instanceof ItemHoe || item instanceof ItemArmor);
+	}
+
+	public static IItemHandlerModifiable immutableCopy(IItemHandler toCopy)
+	{
+		final List<ItemStack> list = new ArrayList<>(toCopy.getSlots());
+		for (int i = 0; i < toCopy.getSlots(); i++)
+		{
+			list.add(toCopy.getStackInSlot(i));
+		}
+
+		return new IItemHandlerModifiable()
+		{
+			@Override
+			public void setStackInSlot(int slot, @Nonnull ItemStack stack) {}
+
+			@Override
+			public int getSlots() {
+				return list.size();
+			}
+
+			@Nonnull
+			@Override
+			public ItemStack getStackInSlot(int slot) {
+				return list.get(slot);
+			}
+
+			@Nonnull
+			@Override
+			public ItemStack insertItem(int slot, @Nonnull ItemStack stack, boolean simulate) {
+				return stack;
+			}
+
+			@Nonnull
+			@Override
+			public ItemStack extractItem(int slot, int amount, boolean simulate) {
+				return ItemStack.EMPTY;
+			}
+
+			@Override
+			public int getSlotLimit(int slot)
+			{
+				return getStackInSlot(slot).getMaxStackSize();
+			}
+		};
+	}
+
+	public static boolean isDamageable(ItemStack stack)
+	{
+		return !stack.getHasSubtypes() && stack.isItemStackDamageable();
+	}
+
+	public static boolean isOre(IBlockState state)
+	{
+		if (state.getBlock() == Blocks.LIT_REDSTONE_ORE)
+		{
+			return true;
+		}
+		if (Item.getItemFromBlock(state.getBlock()) == Items.AIR)
+		{
+			return false;
+		}
+		String oreDictName = getOreDictionaryName(stateToStack(state, 1));
 		return oreDictName.startsWith("ore") || oreDictName.startsWith("denseore");
 	}
 
-	public static ItemStack[] nbtToArray(NBTTagList list)
+	public static IBlockState stackToState(ItemStack stack)
 	{
-		ItemStack[] stacks = new ItemStack[list.tagCount()];
-		for (int i = 0; i < list.tagCount(); i++)
+		if (stack.getItem() instanceof ItemBlock)
 		{
-			stacks[i] = ItemStack.loadItemStackFromNBT(list.getCompoundTagAt(i));
-		}
-		return stacks;
-	}
-
-	public static void pushLootBallInInv(IInventory inv, EntityLootBall ball)
-	{
-		List<ItemStack> results = Lists.newArrayList();
-		for (ItemStack s : ball.getItemList())
-		{
-			ItemStack result = pushStackInInv(inv, s);
-			if (result != null)
-			{
-				results.add(result);
-			}
-		}
-		ball.setItemList(results);
-	}
-
-	/**
-	 *	Returns an itemstack if the stack passed could not entirely fit in the inventory, otherwise returns null.
-	 */
-	public static ItemStack pushStackInInv(IInventory inv, ItemStack stack)
-	{
-		int limit;
-
-		if (inv instanceof InventoryPlayer)
-		{
-			limit = ((InventoryPlayer) inv).mainInventory.length;
+			return ((ItemBlock) stack.getItem()).getBlock().getStateFromMeta(stack.getMetadata());
 		}
 		else
 		{
-			limit = inv.getSizeInventory();
+			return null;
 		}
-
-		for (int i = 0; i < limit; i++)
-		{
-			ItemStack invStack = inv.getStackInSlot(i);
-
-			if (invStack == null)
-			{
-				inv.setInventorySlotContents(i, stack);
-				return null;
-			}
-
-			if (inv.isItemValidForSlot(i, stack)
-				&& areItemStacksEqual(stack, invStack) && invStack.stackSize < invStack.getMaxStackSize())
-			{
-				int remaining = invStack.getMaxStackSize() - invStack.stackSize;
-
-				if (remaining >= stack.stackSize)
-				{
-					invStack.stackSize += stack.stackSize;
-					inv.setInventorySlotContents(i, invStack);
-					return null;
-				}
-
-				invStack.stackSize += remaining;
-				inv.setInventorySlotContents(i, invStack);
-				stack.stackSize -= remaining;
-			}
-		}
-
-		return stack.copy();
 	}
 
-	/**
-	 *	Returns an itemstack if the stack passed could not entirely fit in the inventory, otherwise returns null.
-	 */
-	public static ItemStack pushStackInInv(ItemStack[] inv, ItemStack stack)
+	public static ItemStack stateToStack(IBlockState state, int stackSize)
 	{
-		for (int i = 0; i < inv.length; i++)
-		{
-			ItemStack invStack = inv[i];
-
-			if (invStack == null)
-			{
-				inv[i] = stack;
-				return null;
-			}
-
-			if (areItemStacksEqual(stack, invStack) && invStack.stackSize < invStack.getMaxStackSize())
-			{
-				int remaining = invStack.getMaxStackSize() - invStack.stackSize;
-
-				if (remaining >= stack.stackSize)
-				{
-					invStack.stackSize += stack.stackSize;
-					inv[i] = invStack;
-					return null;
-				}
-
-				invStack.stackSize += remaining;
-				inv[i] = invStack;
-				stack.stackSize -= remaining;
-			}
-		}
-
-		return stack.copy();
+		return new ItemStack(state.getBlock(), stackSize, state.getBlock().getMetaFromState(state));
 	}
 
-	/**
-	 * Takes an array of ItemStacks and turns it into an NBTTaglist.
-	 */
-	public static NBTTagList toIndexedNBTList(ItemStack[] stacks)
+	public static ItemStack stateToDroppedStack(IBlockState state, int stackSize)
 	{
-		NBTTagList list = new NBTTagList();
-		for (int i = 0; i < stacks.length; i++)
-		{
-			if (stacks[i] != null)
-			{
-				NBTTagCompound entry = new NBTTagCompound();
-				entry.setByte("index", ((byte) i));
-				stacks[i].writeToNBT(entry);
-				list.appendTag(entry);
-			}
-		}
-		return list;
-	}
-
-	public static void trimItemList(List<ItemStack> list)
-	{
-		Iterator<ItemStack> iter = list.iterator();
-		while (iter.hasNext())
-		{
-			ItemStack s = iter.next();
-			if (s.stackSize <= 0)
-			{
-				iter.remove();
-			}
-		}
+		return new ItemStack(state.getBlock(), stackSize, state.getBlock().damageDropped(state));
 	}
 }

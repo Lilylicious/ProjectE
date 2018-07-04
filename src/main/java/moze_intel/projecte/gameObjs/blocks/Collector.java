@@ -1,45 +1,48 @@
 package moze_intel.projecte.gameObjs.blocks;
 
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import moze_intel.projecte.PECore;
+import moze_intel.projecte.api.item.IItemEmc;
 import moze_intel.projecte.gameObjs.tiles.CollectorMK1Tile;
 import moze_intel.projecte.gameObjs.tiles.CollectorMK2Tile;
 import moze_intel.projecte.gameObjs.tiles.CollectorMK3Tile;
-import moze_intel.projecte.gameObjs.tiles.TileEmc;
-import moze_intel.projecte.utils.ComparatorHelper;
 import moze_intel.projecte.utils.Constants;
+import moze_intel.projecte.utils.MathUtils;
 import net.minecraft.block.material.Material;
-import net.minecraft.client.renderer.texture.IIconRegister;
-import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.inventory.InventoryHelper;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.IIcon;
+import net.minecraft.util.EnumFacing;
+import net.minecraft.util.EnumHand;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
-import net.minecraftforge.common.util.ForgeDirection;
+import net.minecraftforge.items.CapabilityItemHandler;
+import net.minecraftforge.items.IItemHandler;
+
+import javax.annotation.Nonnull;
 
 public class Collector extends BlockDirection
 {
-	@SideOnly(Side.CLIENT)
-	private IIcon front;
-	@SideOnly(Side.CLIENT)
-	private IIcon top;
-	private int tier;
+	private final int tier;
 	
 	public Collector(int tier) 
 	{
-		super(Material.glass);
-		this.setBlockName("pe_collector_MK" + tier);
+		super(Material.GLASS);
+		this.setUnlocalizedName("pe_collector_MK" + tier);
 		this.setLightLevel(Constants.COLLECTOR_LIGHT_VALS[tier - 1]);
 		this.setHardness(0.3f);
 		this.tier = tier;
 	}
 	
 	@Override
-	public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer player, int side, float hitX, float hitY, float hitZ)
+	public boolean onBlockActivated(World world, BlockPos pos, IBlockState state, EntityPlayer player, EnumHand hand, EnumFacing side, float hitX, float hitY, float hitZ)
 	{
+		int x = pos.getX();
+		int y = pos.getY();
+		int z = pos.getZ();
+
 		if (!world.isRemote)
 			switch (tier)
 			{
@@ -55,58 +58,15 @@ public class Collector extends BlockDirection
 			}
 		return true;
 	}
-	
-	@Override
-	public void onBlockPlacedBy(World world, int x, int y, int z, EntityLivingBase entLiving, ItemStack stack)
-	{
-		setFacingMeta(world, x, y, z, ((EntityPlayer) entLiving));
-		
-		TileEntity tile = world.getTileEntity(x, y, z);
-		
-		if (stack.hasTagCompound() && stack.stackTagCompound.getBoolean("ProjectEBlock") && tile instanceof TileEmc)
-		{
-			stack.stackTagCompound.setInteger("x", x);
-			stack.stackTagCompound.setInteger("y", y);
-			stack.stackTagCompound.setInteger("z", z);
-			
-			tile.readFromNBT(stack.stackTagCompound);
-		}
-	}
-	
-	@Override
-	@SideOnly(Side.CLIENT)
-	public void registerBlockIcons(IIconRegister register)
-	{
-		this.blockIcon = register.registerIcon("projecte:collectors/other");
-		this.front = register.registerIcon("projecte:collectors/front");
-		this.top = register.registerIcon("projecte:collectors/top_"+Integer.toString(tier));
-	}
-	
-	@Override
-	@SideOnly(Side.CLIENT)
-	public IIcon getIcon(int side, int meta)
-	{
-		if (meta == 0 && side == 3) 
-		{
-			return front;
-		}
-		
-		if (side == 1) 
-		{
-			return top;
-		}
-		
-		return side != meta ? this.blockIcon : front;
-	}
 
 	@Override
-	public boolean hasTileEntity(int meta)
+	public boolean hasTileEntity(IBlockState state)
 	{
 		return true;
 	}
 
 	@Override
-	public TileEntity createTileEntity(World world, int meta) {
+	public TileEntity createTileEntity(@Nonnull World world, @Nonnull IBlockState state) {
 		switch (tier) {
 			case 3:
 				return new CollectorMK3Tile();
@@ -120,19 +80,56 @@ public class Collector extends BlockDirection
 	}
 
 	@Override
-	public boolean hasComparatorInputOverride()
+	public boolean hasComparatorInputOverride(IBlockState state)
 	{
 		return true;
 	}
 
 	@Override
-	public int getComparatorInputOverride(World world, int x, int y, int z, int meta)
+	public int getComparatorInputOverride(IBlockState state, World world, BlockPos pos)
 	{
-		return ComparatorHelper.getForCollector(world, x, y, z);
+		CollectorMK1Tile tile = ((CollectorMK1Tile) world.getTileEntity(pos));
+		ItemStack charging = tile.getCapability(CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, EnumFacing.UP).getStackInSlot(CollectorMK1Tile.UPGRADING_SLOT);
+		if (!charging.isEmpty())
+		{
+			if (charging.getItem() instanceof IItemEmc)
+			{
+				IItemEmc itemEmc = ((IItemEmc) charging.getItem());
+				double max = itemEmc.getMaximumEmc(charging);
+				double current = itemEmc.getStoredEmc(charging);
+				return MathUtils.scaleToRedstone(current, max);
+			} else
+			{
+				double needed = tile.getEmcToNextGoal();
+				double current = tile.getStoredEmc();
+				return MathUtils.scaleToRedstone(current, needed);
+			}
+		} else
+		{
+			return MathUtils.scaleToRedstone(tile.getStoredEmc(), tile.getMaximumEmc());
+		}
 	}
 
 	@Override
-	public boolean isSideSolid(IBlockAccess world, int x, int y, int z, ForgeDirection side) {
+	public boolean isSideSolid(IBlockState state, @Nonnull IBlockAccess world, @Nonnull BlockPos pos, EnumFacing side) {
 		return true;
+	}
+
+	@Override
+	public void breakBlock(@Nonnull World world, @Nonnull BlockPos pos, @Nonnull IBlockState state)
+	{
+		TileEntity ent = world.getTileEntity(pos);
+		if (ent != null)
+		{
+			IItemHandler handler = ent.getCapability(CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, EnumFacing.UP);
+			for (int i = 0; i < handler.getSlots(); i++)
+			{
+				if (i != CollectorMK1Tile.LOCK_SLOT && !handler.getStackInSlot(i).isEmpty())
+				{
+					InventoryHelper.spawnItemStack(world, pos.getX(), pos.getY(), pos.getZ(), handler.getStackInSlot(i));
+				}
+			}
+		}
+		super.breakBlock(world, pos, state);
 	}
 }

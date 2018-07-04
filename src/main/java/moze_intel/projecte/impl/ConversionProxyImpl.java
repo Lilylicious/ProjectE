@@ -1,20 +1,25 @@
 package moze_intel.projecte.impl;
 
-import moze_intel.projecte.api.proxy.IConversionProxy;
-import moze_intel.projecte.emc.IngredientMap;
-import moze_intel.projecte.emc.NormalizedSimpleStack;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import cpw.mods.fml.common.Loader;
-import cpw.mods.fml.common.ModContainer;
+import moze_intel.projecte.api.proxy.IConversionProxy;
+import moze_intel.projecte.emc.IngredientMap;
+import moze_intel.projecte.emc.json.NSSFake;
+import moze_intel.projecte.emc.json.NSSFluid;
+import moze_intel.projecte.emc.json.NSSItem;
+import moze_intel.projecte.emc.json.NSSOreDictionary;
+import moze_intel.projecte.emc.json.NormalizedSimpleStack;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.fml.common.ModContainer;
 import org.apache.commons.lang3.ClassUtils;
 
+import javax.annotation.Nonnull;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,10 +28,10 @@ public class ConversionProxyImpl implements IConversionProxy
 
 	public static final ConversionProxyImpl instance = new ConversionProxyImpl();
 
-	Map<Object, NormalizedSimpleStack> fakes = Maps.newHashMap();
+	final Map<Object, NormalizedSimpleStack> fakes = new HashMap<>();
 
 	@Override
-	public void addConversion(int amount, Object output, Map<Object, Integer> ingredients) {
+	public void addConversion(int amount, @Nonnull Object output, @Nonnull Map<Object, Integer> ingredients) {
 		NormalizedSimpleStack nssOut = objectToNSS(output);
 		IngredientMap<NormalizedSimpleStack> ingredientMap = new IngredientMap<>();
 		for (Map.Entry<Object, Integer> entry: ingredients.entrySet()) {
@@ -44,7 +49,7 @@ public class ConversionProxyImpl implements IConversionProxy
 		conversionsFromMod.add(new APIConversion(amount, nssOut, ImmutableMap.copyOf(ingredientMap.getMap())));
 	}
 
-	public Map<String, List<APIConversion>> storedConversions = Maps.newHashMap();
+	public final Map<String, List<APIConversion>> storedConversions = new HashMap<>();
 
 	public NormalizedSimpleStack objectToNSS(Object object)
 	{
@@ -55,15 +60,15 @@ public class ConversionProxyImpl implements IConversionProxy
 		}
 
 		if (object instanceof ItemStack) {
-			return NormalizedSimpleStack.getFor((ItemStack) object);
+			return NSSItem.create((ItemStack) object);
 		} else if (object instanceof FluidStack) {
-			return NormalizedSimpleStack.getFor(((FluidStack) object).getFluid());
+			return NSSFluid.create(((FluidStack) object).getFluid());
 		} else if (object instanceof String) {
-			return NormalizedSimpleStack.forOreDictionary((String) object);
+			return NSSOreDictionary.create((String) object);
 		} else if (object != null && object.getClass().equals(Object.class)) {
 			if (fakes.containsKey(object)) return fakes.get(object);
 
-			NormalizedSimpleStack nss = NormalizedSimpleStack.createFake("" + fakes.size() + " by " + getActiveMod());
+			NormalizedSimpleStack nss = NSSFake.create("" + fakes.size() + " by " + getActiveMod());
 			fakes.put(object, nss);
 			return nss;
 		} else {
@@ -76,7 +81,7 @@ public class ConversionProxyImpl implements IConversionProxy
 		return activeMod == null ? "unknown Mod" : activeMod.getModId();
 	}
 
-	public class APIConversion
+	public static class APIConversion
 	{
 		public final int amount;
 		public final NormalizedSimpleStack output;

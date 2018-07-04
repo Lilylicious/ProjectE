@@ -1,10 +1,12 @@
 package moze_intel.projecte.network.packets;
 
-import cpw.mods.fml.common.network.simpleimpl.IMessage;
-import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
-import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
+import moze_intel.projecte.PECore;
 import moze_intel.projecte.network.ThreadCheckUpdate;
+import net.minecraftforge.common.ForgeModContainer;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
+import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 public class CheckUpdatePKT implements IMessage
 {
@@ -19,12 +21,18 @@ public class CheckUpdatePKT implements IMessage
 		@Override
 		public IMessage onMessage(CheckUpdatePKT message, MessageContext ctx)
 		{
-			if (!ThreadCheckUpdate.hasRunClient())
+			if (!ThreadCheckUpdate.hasRun() && updateCheckEnabled())
 			{
-				new ThreadCheckUpdate(false).start();
+				new ThreadCheckUpdate().start();
 			}
 
 			return null;
+		}
+
+		private static boolean updateCheckEnabled()
+		{
+			return ForgeModContainer.getConfig().get(ForgeModContainer.VERSION_CHECK_CAT, "Global", true).getBoolean()
+					&& ForgeModContainer.getConfig().get(ForgeModContainer.VERSION_CHECK_CAT, PECore.MODID, true).getBoolean();
 		}
 	}
 }

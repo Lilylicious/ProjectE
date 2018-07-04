@@ -1,21 +1,27 @@
 package moze_intel.projecte.gameObjs.container;
 
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import moze_intel.projecte.api.item.IItemEmc;
+import moze_intel.projecte.gameObjs.ObjHandler;
+import moze_intel.projecte.gameObjs.container.slots.SlotPredicates;
+import moze_intel.projecte.gameObjs.container.slots.ValidatedSlot;
 import moze_intel.projecte.gameObjs.tiles.RMFurnaceTile;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.inventory.Container;
-import net.minecraft.inventory.ICrafting;
+import net.minecraft.inventory.IContainerListener;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.FurnaceRecipes;
 import net.minecraft.tileentity.TileEntityFurnace;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraftforge.items.IItemHandler;
+
+import javax.annotation.Nonnull;
 
 public class RMFurnaceContainer extends Container
 {
-	private RMFurnaceTile tile;
+	final RMFurnaceTile tile;
 	private int lastCookTime;
 	private int lastBurnTime;
 	private int lastItemBurnTime;
@@ -23,49 +29,63 @@ public class RMFurnaceContainer extends Container
 	public RMFurnaceContainer(InventoryPlayer invPlayer, RMFurnaceTile tile)
 	{
 		this.tile = tile;
-		
+		initSlots(invPlayer);
+	}
+
+	void initSlots(InventoryPlayer invPlayer)
+	{
+		IItemHandler fuel = tile.getFuel();
+		IItemHandler input = tile.getInput();
+		IItemHandler output = tile.getOutput();
+
 		//Fuel
-		this.addSlotToContainer(new Slot(tile, 0, 65, 53));
-		
+		this.addSlotToContainer(new ValidatedSlot(fuel, 0, 65, 53, SlotPredicates.FURNACE_FUEL));
+
 		//Input(0)
-		this.addSlotToContainer(new Slot(tile, 1, 65, 17));
-		
+		this.addSlotToContainer(new ValidatedSlot(input, 0, 65, 17, SlotPredicates.SMELTABLE));
+
+		int counter = input.getSlots() - 1;
+
 		//Input storage
 		for (int i = 0; i < 3; i++)
 			for (int j = 0; j < 4; j++)
-				this.addSlotToContainer(new Slot(tile, i * 4 + j + 2, 11 + i * 18, 8 + j * 18));
-		
+				this.addSlotToContainer(new ValidatedSlot(input, counter--, 11 + i * 18, 8 + j * 18, SlotPredicates.SMELTABLE));
+
+		counter = output.getSlots() - 1;
+
 		//Output(0)
-		this.addSlotToContainer(new Slot(tile, 14, 125, 35));
-		
+		this.addSlotToContainer(new ValidatedSlot(output, counter--, 125, 35, s -> false));
+
 		//Output Storage
 		for (int i = 0; i < 3; i++)
 			for (int j = 0; j < 4; j++)
-				this.addSlotToContainer(new Slot(tile, i * 4 + j + 15, 147 + i * 18, 8 + j * 18));
-		
+				this.addSlotToContainer(new ValidatedSlot(output, counter--, 147 + i * 18, 8 + j * 18, s -> false));
+
 		//Player Inventory
 		for (int i = 0; i < 3; i++)
 			for (int j = 0; j < 9; j++)
 				this.addSlotToContainer(new Slot(invPlayer, j + i * 9 + 9, 24 + j * 18, 84 + i * 18));
-		
+
 		//Player HotBar
 		for (int i = 0; i < 9; i++)
 			this.addSlotToContainer(new Slot(invPlayer, i, 24 + i * 18, 142));
 	}
 
 	@Override
-	public boolean canInteractWith(EntityPlayer player)
+	public boolean canInteractWith(@Nonnull EntityPlayer player)
 	{
-		return player.getDistanceSq(tile.xCoord + 0.5, tile.yCoord + 0.5, tile.zCoord + 0.5) <= 64.0;
+		return (player.world.getBlockState(tile.getPos()).getBlock() == ObjHandler.rmFurnaceOff
+				|| player.world.getBlockState(tile.getPos()).getBlock() == ObjHandler.rmFurnaceOn)
+			&& player.getDistanceSq(tile.getPos().getX() + 0.5, tile.getPos().getY() + 0.5, tile.getPos().getZ() + 0.5) <= 64.0;
 	}
 	
 	@Override
-	public void addCraftingToCrafters(ICrafting par1ICrafting)
+	public void addListener(IContainerListener par1IContainerListener)
 	{
-		super.addCraftingToCrafters(par1ICrafting);
-		par1ICrafting.sendProgressBarUpdate(this, 0, tile.furnaceCookTime);
-		par1ICrafting.sendProgressBarUpdate(this, 1, tile.furnaceBurnTime);
-		par1ICrafting.sendProgressBarUpdate(this, 2, tile.currentItemBurnTime);
+		super.addListener(par1IContainerListener);
+		par1IContainerListener.sendWindowProperty(this, 0, tile.furnaceCookTime);
+		par1IContainerListener.sendWindowProperty(this, 1, tile.furnaceBurnTime);
+		par1IContainerListener.sendWindowProperty(this, 2, tile.currentItemBurnTime);
 	}
 	
 	@Override
@@ -73,18 +93,16 @@ public class RMFurnaceContainer extends Container
 	{
 		super.detectAndSendChanges();
 
-		for (int i = 0; i < this.crafters.size(); ++i)
+		for (IContainerListener crafter : this.listeners)
 		{
-			ICrafting icrafting = (ICrafting)this.crafters.get(i);
-
 			if (lastCookTime != tile.furnaceCookTime)
-				icrafting.sendProgressBarUpdate(this, 0, tile.furnaceCookTime);
+				crafter.sendWindowProperty(this, 0, tile.furnaceCookTime);
 
 			if (lastBurnTime != tile.furnaceBurnTime)
-				icrafting.sendProgressBarUpdate(this, 1, tile.furnaceBurnTime);
+				crafter.sendWindowProperty(this, 1, tile.furnaceBurnTime);
 
 			if (lastItemBurnTime != tile.currentItemBurnTime)
-				icrafting.sendProgressBarUpdate(this, 2, tile.currentItemBurnTime);
+				crafter.sendWindowProperty(this, 2, tile.currentItemBurnTime);
 		}
 
 		lastCookTime = tile.furnaceCookTime;
@@ -104,7 +122,8 @@ public class RMFurnaceContainer extends Container
 		if (par1 == 2)
 			tile.currentItemBurnTime = par2;
 	}
-	
+
+	@Nonnull
 	@Override
 	public ItemStack transferStackInSlot(EntityPlayer player, int slotIndex)
 	{
@@ -112,7 +131,7 @@ public class RMFurnaceContainer extends Container
 		
 		if (slot == null || !slot.getHasStack()) 
 		{
-			return null;
+			return ItemStack.EMPTY;
 		}
 		
 		ItemStack stack = slot.getStack();
@@ -122,7 +141,7 @@ public class RMFurnaceContainer extends Container
 		{
 			if (!this.mergeItemStack(stack, 27, 63, false))
 			{
-				return null;
+				return ItemStack.EMPTY;
 			}
 		}
 		else
@@ -132,25 +151,25 @@ public class RMFurnaceContainer extends Container
 			{
 				if (!this.mergeItemStack(stack, 0, 1, false))
 				{
-					return null;
+					return ItemStack.EMPTY;
 				}
 			}
-			else if (FurnaceRecipes.smelting().getSmeltingResult(newStack) != null)
+			else if (!FurnaceRecipes.instance().getSmeltingResult(newStack).isEmpty())
 			{
 				if (!this.mergeItemStack(stack, 1, 14, false))
 				{
-					return null;
+					return ItemStack.EMPTY;
 				}
 			}
 			else
 			{
-				return null;
+				return ItemStack.EMPTY;
 			}
 		}
 		
-		if (stack.stackSize == 0)
+		if (stack.isEmpty())
 		{
-			slot.putStack(null);
+			slot.putStack(ItemStack.EMPTY);
 		}
 		else
 		{

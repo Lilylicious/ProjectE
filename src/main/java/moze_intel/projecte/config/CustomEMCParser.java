@@ -1,35 +1,75 @@
 package moze_intel.projecte.config;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import com.google.common.base.Charsets;
+import com.google.common.io.Files;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.annotations.SerializedName;
 import moze_intel.projecte.PECore;
-import moze_intel.projecte.emc.NormalizedSimpleStack;
-import moze_intel.projecte.utils.FileHelper;
-import moze_intel.projecte.utils.ItemHelper;
-import moze_intel.projecte.utils.PELogger;
-import net.minecraft.item.ItemStack;
-import net.minecraftforge.oredict.OreDictionary;
+import moze_intel.projecte.emc.json.NSSItem;
+import moze_intel.projecte.emc.json.NSSOreDictionary;
+import moze_intel.projecte.emc.json.NormalizedSimpleStack;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.LineNumberReader;
-import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 public final class CustomEMCParser
 {
-	private static final String VERSION = "#0.2";
-	private static File CONFIG;
-	private static boolean loaded;
+	private static final Gson GSON = new GsonBuilder().registerTypeAdapter(NormalizedSimpleStack.class, NormalizedSimpleStack.Serializer.INSTANCE).setPrettyPrinting().create();
+	private static final File CONFIG = new File(PECore.CONFIG_DIR, "custom_emc.json");
+
+	public static class CustomEMCFile
+	{
+		public final List<CustomEMCEntry> entries;
+
+		public CustomEMCFile(List<CustomEMCEntry> entries)
+		{
+			this.entries = entries;
+		}
+	}
+
+	public static class CustomEMCEntry
+	{
+		@SerializedName("item")
+		public final NormalizedSimpleStack nss;
+		public final int emc;
+
+		private CustomEMCEntry(NormalizedSimpleStack nss, int emc)
+		{
+			this.nss = nss;
+			this.emc = emc;
+		}
+
+		@Override
+		public boolean equals(Object o)
+		{
+			return o == this ||
+					o instanceof CustomEMCEntry
+							&& nss.equals(((CustomEMCEntry) o).nss)
+							&& emc == ((CustomEMCEntry) o).emc;
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return nss.hashCode() ^ 31 * emc;
+		}
+	}
+
+	public static CustomEMCFile currentEntries;
+	private static boolean dirty = false;
 
 	public static void init()
 	{
-		CONFIG = new File(PECore.CONFIG_DIR, "custom_emc.cfg");
-		loaded = false;
+		flush();
 
 		if (!CONFIG.exists())
 		{
@@ -38,434 +78,109 @@ public final class CustomEMCParser
 				if (CONFIG.createNewFile())
 				{
 					writeDefaultFile();
-					loaded = true;
 				}
 			}
 			catch (IOException e)
 			{
-				PELogger.logFatal("Exception in file I/O: couldn't create custom configuration files.");
-				e.printStackTrace();
-				return;
+				PECore.LOGGER.fatal("Exception in file I/O: couldn't create custom configuration files.");
 			}
 		}
-		else
-		{
-			BufferedReader reader = null;
 
-			try
-			{
-				reader = new BufferedReader(new FileReader(CONFIG));
-
-				String line = reader.readLine();
-
-				if (line == null || !line.equals(VERSION))
-				{
-					PELogger.logFatal("Found old custom EMC file: resetting.");
-					writeDefaultFile();
-				}
-			}
-			catch (IOException e)
-			{
-				PELogger.logFatal("Exception in file I/O: couldn't create custom configuration files.");
-				e.printStackTrace();
-			}
-			finally
-			{
-				FileHelper.closeStream(reader);
-			}
-
-			loaded = true;
+		try (BufferedReader reader = new BufferedReader(new FileReader(CONFIG))) {
+			currentEntries = GSON.fromJson(reader, CustomEMCFile.class);
+			currentEntries.entries.removeIf(e -> e.nss == null || e.emc < 0 || !(e.nss instanceof NSSItem || e.nss instanceof NSSOreDictionary));
+		} catch (IOException | JsonParseException e) {
+			PECore.LOGGER.fatal("Couldn't read custom emc file");
+			e.printStackTrace();
+			currentEntries = new CustomEMCFile(new ArrayList<>());
 		}
 	}
 
-	public static Map<NormalizedSimpleStack, Integer> userValues = Maps.newHashMap();
-
-	public static void readUserData()
+	private static NormalizedSimpleStack getNss(String str, int meta)
 	{
-		if (!loaded)
+		if (str.contains(":"))
 		{
-			PELogger.logFatal("ERROR: configurations files are not loaded!");
-			return;
+			return NSSItem.create(str, meta);
 		}
-
-		Entry entry;
-		LineNumberReader reader = null;
-		userValues.clear();
-		try
+		else
 		{
-			reader = new LineNumberReader(new FileReader(CONFIG));
-
-			while ((entry = getNextEntry(reader)) != null)
-			{
-				if (entry.name.contains(":"))
-				{
-					ItemStack stack = ItemHelper.getStackFromString(entry.name, entry.meta);
-
-					if (stack == null)
-					{
-						PELogger.logFatal("Error in custom EMC file: couldn't find item: " + entry.name);
-						PELogger.logFatal("At line number: " + reader.getLineNumber());
-						continue;
-					}
-
-					if (entry.emc <= 0)
-					{
-						PELogger.logInfo("Removed " + entry.name + " from EMC mapping");
-					}
-					else
-					{
-						PELogger.logInfo("Registered custom EMC for: " + entry.name + "(" + entry.emc + ")");
-					}
-					userValues.put(NormalizedSimpleStack.getFor(stack), entry.emc > 0 ? entry.emc  : 0);
-				}
-				else
-				{
-					if (OreDictionary.getOres(entry.name).isEmpty())
-					{
-						PELogger.logFatal("Error in custom EMC file: no OD entry for " + entry.name);
-						PELogger.logFatal("At line number: " + reader.getLineNumber());
-						continue;
-					}
-
-					if (entry.emc <= 0)
-					{
-						PELogger.logInfo("Removed " + entry.name + " from EMC mapping");
-					}
-					else
-					{
-						PELogger.logInfo("Registered custom EMC for: " + entry.name + "(" + entry.emc + ")");
-					}
-					for (ItemStack stack : ItemHelper.getODItems(entry.name))
-					{
-						userValues.put(NormalizedSimpleStack.getFor(stack), entry.emc > 0 ? entry.emc  : 0);
-					}
-				}
-			}
-		}
-		catch (Exception e)
-		{
-			e.printStackTrace();
-		}
-		finally
-		{
-			FileHelper.closeStream(reader);
+			return NSSOreDictionary.create(str);
 		}
 	}
 
 	public static boolean addToFile(String toAdd, int meta, int emc)
 	{
-		if (!loaded)
+		NormalizedSimpleStack nss = getNss(toAdd, meta);
+		CustomEMCEntry entry = new CustomEMCEntry(nss, emc);
+
+		int setAt = -1;
+
+		for (int i = 0; i < currentEntries.entries.size(); i++)
 		{
-			PELogger.logFatal("ERROR: configurations files are not loaded!");
-			return false;
-		}
-
-		PrintWriter writer = null;
-		boolean result = false;
-
-		try
-		{
-			List<String> file = readAllFile();
-			List<Entry> entries = getAllEntries();
-
-			boolean hasFound = false;
-			boolean isOD = !toAdd.contains(":");
-
-			for (Entry e : entries)
+			if (currentEntries.entries.get(i).nss.equals(nss))
 			{
-				if (!e.name.equals(toAdd) || (!isOD && e.meta != meta))
-				{
-					continue;
-				}
-
-				file.set(e.emcIndex - 1, "E:" + emc);
-				hasFound = true;
+				setAt = i;
 				break;
 			}
-
-			if (hasFound)
-			{
-				writer = new PrintWriter(new FileOutputStream(CONFIG, false));
-
-				for (String s : file)
-				{
-					writer.println(s);
-				}
-
-				result = true;
-			}
-			else
-			{
-				writer = new PrintWriter(new FileOutputStream(CONFIG, true));
-
-				writer.append("\n");
-				writer.append("S:" + toAdd + "\n");
-
-				if (toAdd.contains(":"))
-				{
-					writer.append("M:" + meta + "\n");
-				}
-
-				writer.append("E:" + emc + "\n");
-
-				result = true;
-			}
 		}
-		catch (Exception e)
+
+		if (setAt == -1)
 		{
-			e.printStackTrace();
-		}
-		finally
+			currentEntries.entries.add(entry);
+		} else
 		{
-			FileHelper.closeStream(writer);
+			currentEntries.entries.set(setAt, entry);
 		}
 
-		return result;
+		dirty = true;
+		return true;
 	}
 
 	public static boolean removeFromFile(String toRemove, int meta)
 	{
-		if (!loaded)
+		NormalizedSimpleStack nss = getNss(toRemove, meta);
+		Iterator<CustomEMCEntry> iter = currentEntries.entries.iterator();
+
+		boolean removed = false;
+		while (iter.hasNext())
 		{
-			PELogger.logFatal("ERROR: configurations files are not loaded!");
-			return false;
-		}
-
-		PrintWriter writer = null;
-		boolean result = false;
-
-		try
-		{
-			List<String> file = readAllFile();
-			List<Entry> entries = getAllEntries();
-
-			boolean isOD = !toRemove.contains(":");
-
-			for (Entry e : entries)
+			if (iter.next().nss.equals(nss))
 			{
-				if (!e.name.equals(toRemove) || (!isOD && e.meta != meta))
-				{
-					continue;
-				}
-
-				file.remove(e.emcIndex - 1);
-
-				if (!isOD)
-				{
-					file.remove(e.metaIndex - 1);
-				}
-
-				file.remove(e.nameIndex - 1);
-
-				result = true;
-				break;
-			}
-
-			if (result)
-			{
-				writer = new PrintWriter(new FileOutputStream(CONFIG, false));
-
-				for (String s : file)
-				{
-					writer.println(s);
-				}
+				iter.remove();
+				dirty = true;
+				removed = true;
 			}
 		}
-		catch (Exception e)
-		{
-			e.printStackTrace();
-		}
-		finally
-		{
-			FileHelper.closeStream(writer);
-		}
 
-		return result;
+		return removed;
 	}
 
-	private static List<String> readAllFile()
+	private static void flush()
 	{
-		List<String> list = Lists.newArrayList();
-		BufferedReader reader = null;
-
-		try
+		if (dirty)
 		{
-			reader = new BufferedReader(new FileReader(CONFIG));
-
-			String s;
-
-			while ((s = reader.readLine()) != null)
+			try
 			{
-				list.add(s);
+				Files.write(GSON.toJson(currentEntries), CONFIG, Charsets.UTF_8);
+			} catch (IOException e) {
+				e.printStackTrace();
 			}
 
-			return list;
+			dirty = false;
 		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-		finally
-		{
-			FileHelper.closeStream(reader);
-		}
-
-		return Lists.newArrayList();
-	}
-
-	private static List<Entry> getAllEntries()
-	{
-		List<Entry> list = Lists.newArrayList();
-		LineNumberReader reader = null;
-
-		try
-		{
-			reader = new LineNumberReader(new FileReader(CONFIG));
-
-			Entry e;
-
-			while ((e = getNextEntry(reader)) != null)
-			{
-				list.add(e);
-			}
-
-			return list;
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-		finally
-		{
-			FileHelper.closeStream(reader);
-		}
-
-		return Lists.newArrayList();
-	}
-
-	private static Entry getNextEntry(LineNumberReader reader) throws IOException
-	{
-		String line;
-
-		while ((line = getNextLine(reader)) != null)
-		{
-			if (line.charAt(0) == 'S')
-			{
-				String name = line.substring(2);
-				int nameIndex = reader.getLineNumber();
-
-				line = getNextLine(reader);
-
-				int meta = -1;
-				int metaIndex = -1;
-
-				if (name.contains(":"))
-				{
-					if (line == null || line.charAt(0) != 'M')
-					{
-						continue;
-					}
-
-					meta = 0;
-					metaIndex = reader.getLineNumber();
-
-					try
-					{
-						meta = Integer.valueOf(line.substring(2));
-					}
-					catch (NumberFormatException e)
-					{
-						e.printStackTrace();
-						continue;
-					}
-
-					line = getNextLine(reader);
-				}
-
-				if (line == null || line.charAt(0) != 'E')
-				{
-					continue;
-				}
-
-				int emc = 0;
-				int emcIndex = reader.getLineNumber();
-
-				try
-				{
-					emc = Integer.valueOf(line.substring(2));
-				}
-				catch (NumberFormatException e)
-				{
-					e.printStackTrace();
-					continue;
-				}
-
-				return new Entry(name, meta, emc, nameIndex, metaIndex, emcIndex);
-			}
-		}
-
-		return null;
-	}
-
-	private static String getNextLine(LineNumberReader reader) throws IOException
-	{
-		String line;
-
-		while ((line = reader.readLine()) != null)
-		{
-			line = line.trim();
-
-			if (line.isEmpty() || line.length() < 3 || line.charAt(0) == '#' || line.charAt(1) != ':')
-			{
-				continue;
-			}
-
-			return line;
-		}
-
-		return null;
 	}
 
 	private static void writeDefaultFile()
 	{
-		PrintWriter writer = null;
-
+		JsonObject elem = (JsonObject) GSON.toJsonTree(new CustomEMCFile(new ArrayList<>()));
+		elem.add("__comment", new JsonPrimitive("Use the in-game commands to edit this file"));
 		try
 		{
-			writer = new PrintWriter(CONFIG);
-
-			writer.println(VERSION);
-			writer.println("Custom EMC file");
-			writer.println("This file is used for custom EMC registration, it is recommended that you do not modify it manually.");
-			writer.println("In game commands are avaliable to set custom values. Type /projecte in game for usage info.");
+			Files.write(GSON.toJson(elem), CONFIG, Charsets.UTF_8);
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
-		}
-		finally
-		{
-			FileHelper.closeStream(writer);
-		}
-	}
-
-	private static class Entry
-	{
-		public String name;
-		public int meta;
-		public int emc;
-		public int nameIndex;
-		public int metaIndex;
-		public int emcIndex;
-
-		public Entry(String name, int meta, int emc, int nameIndex, int metaIndex, int emcIndex)
-		{
-			this.name = name;
-			this.meta = meta;
-			this.emc = emc;
-			this.nameIndex = nameIndex;
-			this.metaIndex = metaIndex;
-			this.emcIndex = emcIndex;
 		}
 	}
 }

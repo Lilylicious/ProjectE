@@ -1,39 +1,35 @@
 package moze_intel.projecte.gameObjs.items.armor;
 
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
+import moze_intel.projecte.PECore;
 import moze_intel.projecte.gameObjs.ObjHandler;
-import moze_intel.projecte.utils.EnumArmorType;
-import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.inventory.EntityEquipmentSlot;
 import net.minecraft.item.ItemArmor;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.DamageSource;
 import net.minecraftforge.common.ISpecialArmor;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
-import java.util.Locale;
+import javax.annotation.Nonnull;
 
 public abstract class GemArmorBase extends ItemArmor implements ISpecialArmor
 {
-	private final EnumArmorType armorPiece;
-
-	public GemArmorBase(EnumArmorType armorType)
+	public GemArmorBase(EntityEquipmentSlot armorType)
 	{
-		super(ArmorMaterial.DIAMOND, 0, armorType.ordinal());
+		super(ArmorMaterial.DIAMOND, 0, armorType);
 		this.setCreativeTab(ObjHandler.cTab);
-		this.setUnlocalizedName("pe_gem_armor_" + armorType.ordinal());
-		this.setHasSubtypes(false);
+		this.setUnlocalizedName("pe_gem_armor_" + armorType.getIndex());
 		this.setMaxDamage(0);
-		this.armorPiece = armorType;
 	}
 
 	public static boolean hasAnyPiece(EntityPlayer player)
 	{
 		for (ItemStack i : player.inventory.armorInventory)
 		{
-			if (i != null && i.getItem() instanceof GemArmorBase)
+			if (!i.isEmpty() && i.getItem() instanceof GemArmorBase)
 			{
 				return true;
 			}
@@ -45,7 +41,7 @@ public abstract class GemArmorBase extends ItemArmor implements ISpecialArmor
 	{
 		for (ItemStack i : player.inventory.armorInventory)
 		{
-			if (i == null || !(i.getItem() instanceof GemArmorBase))
+			if (!i.isEmpty() || !(i.getItem() instanceof GemArmorBase))
 			{
 				return false;
 			}
@@ -54,20 +50,20 @@ public abstract class GemArmorBase extends ItemArmor implements ISpecialArmor
 	}
 
 	@Override
-	public ArmorProperties getProperties(EntityLivingBase player, ItemStack armor, DamageSource source, double damage, int slot)
+	public ArmorProperties getProperties(EntityLivingBase player, @Nonnull ItemStack armor, DamageSource source, double damage, int slot)
 	{
-		EnumArmorType type = ((GemArmorBase) armor.getItem()).armorPiece;
+		EntityEquipmentSlot type = ((GemArmorBase) armor.getItem()).armorType;
 		if (source.isExplosion())
 		{
 			return new ArmorProperties(1, 1.0D, 750);
 		}
 
-		if (type == EnumArmorType.FEET && source == DamageSource.fall)
+		if (type == EntityEquipmentSlot.FEET && source == DamageSource.FALL)
 		{
 			return new ArmorProperties(1, 1.0D, 15);
 		}
 
-		if (type == EnumArmorType.HEAD || type == EnumArmorType.FEET)
+		if (type == EntityEquipmentSlot.HEAD || type == EntityEquipmentSlot.FEET)
 		{
 			return new ArmorProperties(0, 0.2D, 400);
 		}
@@ -76,28 +72,20 @@ public abstract class GemArmorBase extends ItemArmor implements ISpecialArmor
 	}
 
 	@Override
-	public int getArmorDisplay(EntityPlayer player, ItemStack armor, int slot)
+	public int getArmorDisplay(EntityPlayer player, @Nonnull ItemStack armor, int slot)
 	{
-		EnumArmorType type = ((GemArmorBase) armor.getItem()).armorPiece;
-		return (type == EnumArmorType.HEAD || type == EnumArmorType.FEET) ? 4 : 6;
+		EntityEquipmentSlot type = ((GemArmorBase) armor.getItem()).armorType;
+		return (type == EntityEquipmentSlot.HEAD || type == EntityEquipmentSlot.FEET) ? 4 : 6;
 	}
 
 	@Override
-	public void damageArmor(EntityLivingBase entity, ItemStack stack, DamageSource source, int damage, int slot) {}
+	public void damageArmor(EntityLivingBase entity, @Nonnull ItemStack stack, DamageSource source, int damage, int slot) {}
 
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerIcons(IIconRegister par1IconRegister)
+	public String getArmorTexture(ItemStack stack, Entity entity, EntityEquipmentSlot slot, String type)
 	{
-		String type = this.armorPiece.name.toLowerCase(Locale.ROOT);
-		this.itemIcon = par1IconRegister.registerIcon("projecte:gem_armor/" + type);
-	}
-
-	@Override
-	@SideOnly(Side.CLIENT)
-	public String getArmorTexture(ItemStack stack, Entity entity, int slot, String type)
-	{
-		char index = this.armorPiece == EnumArmorType.LEGS ? '2' : '1';
-		return "projecte:textures/armor/gem_" + index + ".png";
+		char index = this.armorType == EntityEquipmentSlot.LEGS ? '2' : '1';
+		return PECore.MODID + ":textures/armor/gem_" + index + ".png";
 	}
 }

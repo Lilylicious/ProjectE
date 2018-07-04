@@ -1,11 +1,11 @@
 package moze_intel.projecte.utils;
 
 import com.google.common.collect.ImmutableBiMap;
-import cpw.mods.fml.client.registry.ClientRegistry;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
 import moze_intel.projecte.PECore;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraftforge.fml.client.registry.ClientRegistry;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 import org.lwjgl.input.Keyboard;
 
 /**
@@ -15,7 +15,7 @@ import org.lwjgl.input.Keyboard;
 public class ClientKeyHelper
 {
     public static ImmutableBiMap<KeyBinding, PEKeybind> mcToPe;
-    public static ImmutableBiMap<PEKeybind, KeyBinding> peToMc;
+    private static ImmutableBiMap<PEKeybind, KeyBinding> peToMc;
 
     public static void registerMCBindings()
     {

@@ -3,29 +3,29 @@ package moze_intel.projecte.gameObjs.gui;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
-import moze_intel.projecte.gameObjs.ObjHandler;
+import moze_intel.projecte.PECore;
 import moze_intel.projecte.manual.AbstractPage;
 import moze_intel.projecte.manual.ImagePage;
 import moze_intel.projecte.manual.IndexPage;
 import moze_intel.projecte.manual.ItemPage;
 import moze_intel.projecte.manual.ManualFontRenderer;
 import moze_intel.projecte.manual.ManualPageHandler;
-import moze_intel.projecte.utils.PELogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemBlock;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.StatCollector;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 import org.apache.commons.lang3.tuple.Pair;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 
+import javax.annotation.Nonnull;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -41,51 +41,40 @@ public class GUIManual extends GuiScreen
 	public static final int BUTTON_HEIGHT = 13;
 	private static final int CHARACTER_HEIGHT = 9;
 	private static final int BUTTON_ID_OFFSET = 3; // Offset of button ID's due to the page turn and TOC buttons
-	private static final ResourceLocation BOOK_TEXTURE = new ResourceLocation("projecte:textures/gui/bookTexture.png");
+	private static final ResourceLocation BOOK_TEXTURE = new ResourceLocation(PECore.MODID, "textures/gui/bookTexture.png");
 	private static final ManualFontRenderer peFontRenderer = new ManualFontRenderer();
 	public static final int ENTRIES_PER_PAGE = TEXT_HEIGHT / CHARACTER_HEIGHT - 2; // Number of entries per index page
 	public static final Multimap<IndexPage, IndexLinkButton> indexLinks = ArrayListMultimap.create(); // IndexPage -> IndexLinkButtons
-	private static ResourceLocation bookGui = new ResourceLocation("textures/gui/book.png");
-	public List<String> bodyTexts = Lists.newArrayList();
+	private static final ResourceLocation bookGui = new ResourceLocation("textures/gui/book.png");
+	public List<String> bodyTexts = new ArrayList<>();
 	private int currentSpread;
 	private int k;
 
-	public static void drawItemStackToGui(Minecraft mc, ItemStack item, int x, int y, boolean fixLighting)
+	public void drawItemStackToGui(ItemStack item, int x, int y)
 	{
-		if (fixLighting)
-		{
-			GL11.glEnable(GL11.GL_LIGHTING);
-		}
-
-		GL11.glEnable(GL12.GL_RESCALE_NORMAL);
-		itemRender.renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), item, x, y);
-
-		if (fixLighting)
-		{
-			GL11.glDisable(GL11.GL_LIGHTING);
-		}
-
-		GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+		RenderHelper.enableStandardItemLighting();
+		GlStateManager.enableRescaleNormal();
+		itemRender.renderItemAndEffectIntoGUI(item, x, y);
+		GlStateManager.disableRescaleNormal();
+		RenderHelper.disableStandardItemLighting();
 	}
 
-	@SuppressWarnings("unchecked")
 	public static List<String> splitBody(String s)
 	{
 		return peFontRenderer.listFormattedStringToWidth(s, TEXT_WIDTH);
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void initGui()
 	{
-		GL11.glScalef(GUI_SCALE_FACTOR, 1, GUI_SCALE_FACTOR);
+		GlStateManager.scale(GUI_SCALE_FACTOR, 1, GUI_SCALE_FACTOR);
 		k = (Math.round(this.width / GUI_SCALE_FACTOR) - WINDOW_WIDTH) / 2;
-		GL11.glScalef(1 / GUI_SCALE_FACTOR, 1, 1 / GUI_SCALE_FACTOR);
+		GlStateManager.scale(1 / GUI_SCALE_FACTOR, 1, 1 / GUI_SCALE_FACTOR);
 
 		this.buttonList.add(new PageTurnButton(0, Math.round((k + 256 - 40) * GUI_SCALE_FACTOR), PAGE_HEIGHT - Math.round(BUTTON_HEIGHT * 1.4f), true));
 		this.buttonList.add(new PageTurnButton(1, Math.round((k + 20) * GUI_SCALE_FACTOR), PAGE_HEIGHT - Math.round(BUTTON_HEIGHT * 1.4f), false));
 
-		String text = StatCollector.translateToLocal("pe.manual.index_button");
+		String text = I18n.format("pe.manual.index_button");
 		int stringWidth = mc.fontRenderer.getStringWidth(text);
 		this.buttonList.add(new TocButton(2, (this.width / 2) - (stringWidth / 2), PAGE_HEIGHT - Math.round(BUTTON_HEIGHT * 1.3f), stringWidth, 15, text));
 
@@ -94,17 +83,18 @@ public class GUIManual extends GuiScreen
 
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void drawScreen(int mouseX, int mouseY, float partialTicks)
 	{
-		GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+		drawDefaultBackground();
+		GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
 
 		this.mc.getTextureManager().bindTexture(BOOK_TEXTURE);
 
-		GL11.glScalef(GUI_SCALE_FACTOR, 1, GUI_SCALE_FACTOR);
+		GlStateManager.scale(GUI_SCALE_FACTOR, 1, GUI_SCALE_FACTOR);
+
 		this.drawTexturedModalRect(k, 5, 0, 0, WINDOW_WIDTH, PAGE_HEIGHT);
-		GL11.glScalef(1 / GUI_SCALE_FACTOR, 1, 1 / GUI_SCALE_FACTOR);
+		GlStateManager.scale(1 / GUI_SCALE_FACTOR, 1, 1 / GUI_SCALE_FACTOR);
 
 		AbstractPage currentPage = ManualPageHandler.spreads.get(currentSpread).getLeft();
 		AbstractPage nextPage = ManualPageHandler.spreads.get(currentSpread).getRight();
@@ -116,9 +106,9 @@ public class GUIManual extends GuiScreen
 
 		this.updateButtons();
 
-		for (GuiButton button : ((List<GuiButton>) this.buttonList))
+		for (GuiButton button : this.buttonList)
 		{
-			button.drawButton(this.mc, mouseX, mouseY);
+			button.drawButton(this.mc, mouseX, mouseY, partialTicks);
 		}
 
 	}
@@ -139,7 +129,7 @@ public class GUIManual extends GuiScreen
 				break;
 			default:
 				int val = Math.round((button.id - 3) / 2.0F);
-				PELogger.logDebug("Clicked button %d which is supposed to be page %d, taking you to spread %d which has page %d on the left", button.id, button.id - 3, val, ManualPageHandler.pages.indexOf(ManualPageHandler.spreads.get(val).getLeft()));
+				PECore.debugLog("Clicked button {} which is supposed to be page {}, taking you to spread {} which has page {} on the left", button.id, button.id - 3, val, ManualPageHandler.pages.indexOf(ManualPageHandler.spreads.get(val).getLeft()));
 				currentSpread = val;
 		}
 		this.updateButtons();
@@ -191,16 +181,15 @@ public class GUIManual extends GuiScreen
 	{
 		Minecraft.getMinecraft().renderEngine.bindTexture(resource);
 
-		GL11.glEnable(GL11.GL_BLEND);
-		GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-		GL11.glColor4f(1F, 1F, 1F, 1F);
-		GL11.glScalef(0.5F, 0.5F, 1F);
+		GlStateManager.enableBlend();
+		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GlStateManager.color(1F, 1F, 1F, 1F);
+		GlStateManager.scale(0.5F, 0.5F, 1F);
 		this.drawTexturedModalRect(x, y, 0, 0, 256, 256);
-		GL11.glScalef(2F, 2F, 1F);
-		GL11.glDisable(GL11.GL_BLEND);
+		GlStateManager.scale(2F, 2F, 1F);
+		GlStateManager.disableBlend();
 	}
 
-	@SuppressWarnings("unchecked")
 	private void addIndexButtons(int x)
 	{
 		int yOffset = 42;
@@ -233,6 +222,7 @@ public class GUIManual extends GuiScreen
 
 			String text = page.getHeaderText();
 			int buttonID = ManualPageHandler.pages.indexOf(page) + BUTTON_ID_OFFSET;
+
 			IndexLinkButton button = new IndexLinkButton(buttonID, x, yOffset, mc.fontRenderer.getStringWidth(text),
 					CHARACTER_HEIGHT, text);
 			buttonList.add(button);
@@ -252,7 +242,7 @@ public class GUIManual extends GuiScreen
 	// Header = k+40, k+160, Image/Text = k+20, k+140
 	public void drawPage(AbstractPage page, int headerX, int contentX)
 	{
-		this.fontRendererObj.drawString(page.getHeaderText(), Math.round(headerX * GUI_SCALE_FACTOR), 27, 0, false);
+		this.fontRenderer.drawString(page.getHeaderText(), Math.round(headerX * GUI_SCALE_FACTOR), 27, 0, false);
 
 		if (page instanceof IndexPage)
 		{
@@ -266,15 +256,14 @@ public class GUIManual extends GuiScreen
 
 			for (int i = 0; i < bodyTexts.size() && i < Math.floor(GUIManual.TEXT_HEIGHT / GUIManual.TEXT_Y_OFFSET); i++)
 			{
-				this.fontRendererObj.drawString(bodyTexts.get(i).charAt(0) == 32 ? bodyTexts.get(i).substring(1) : bodyTexts.get(i),
+				this.fontRenderer.drawString(bodyTexts.get(i).charAt(0) == 32 ? bodyTexts.get(i).substring(1) : bodyTexts.get(i),
 						Math.round(contentX * GUI_SCALE_FACTOR), 43 + TEXT_Y_OFFSET * i, Color.black.getRGB());
 			}
 
 			if (page instanceof ItemPage)
 			{
 				ItemPage itemPage = ((ItemPage) page);
-				drawItemStackToGui(mc, itemPage.getItemStack(), Math.round(contentX * GUI_SCALE_FACTOR), 22, !(itemPage.getItemStack().getItem() instanceof ItemBlock)
-						|| itemPage.getItemStack().getItem() == Item.getItemFromBlock(ObjHandler.confuseTorch));
+				drawItemStackToGui(itemPage.getItemStack(), Math.round(contentX * GUI_SCALE_FACTOR), 22);
 			}
 		}
 	}
@@ -298,11 +287,12 @@ public class GUIManual extends GuiScreen
 		}
 
 		@Override
-		public void drawButton(Minecraft mc, int par2, int par3)
+		public void drawButton(@Nonnull Minecraft mc, int par2, int par3, float partialTicks)
 		{
 			if (visible)
 			{
-				mc.fontRenderer.drawString(displayString, Math.round(xPosition), Math.round(yPosition), 0);
+				GlStateManager.color(0, 0, 0);
+				mc.fontRenderer.drawString(displayString, x, y, 0);
 			}
 		}
 	}
@@ -311,7 +301,7 @@ public class GUIManual extends GuiScreen
 	private static class PageTurnButton extends GuiButton
 	{
 		private static final int bWidth = 23;
-		private boolean pointsRight;
+		private final boolean pointsRight;
 
 		public PageTurnButton(int ID, int xPos, int yPos, boolean par4)
 		{
@@ -320,12 +310,12 @@ public class GUIManual extends GuiScreen
 		}
 
 		@Override
-		public void drawButton(Minecraft mc, int mouseX, int mouseY)
+		public void drawButton(@Nonnull Minecraft mc, int mouseX, int mouseY, float partialTicks)
 		{
 			if (this.visible)
 			{
-				boolean hover = mouseX >= this.xPosition && mouseY >= this.yPosition && mouseX < this.xPosition + this.width && mouseY < this.yPosition + this.height;
-				GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+				boolean hover = mouseX >= this.x && mouseY >= this.y && mouseX < this.x + this.width && mouseY < this.y + this.height;
+				GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
 				mc.getTextureManager().bindTexture(bookGui);
 				int u = 0;
 				int v = 192;
@@ -339,9 +329,9 @@ public class GUIManual extends GuiScreen
 				{
 					v += BUTTON_HEIGHT;
 				}
-				GL11.glEnable(GL11.GL_BLEND);
-				this.drawTexturedModalRect(this.xPosition, this.yPosition, u, v, bWidth, BUTTON_HEIGHT);
-				GL11.glDisable(GL11.GL_BLEND);
+				GlStateManager.enableBlend();
+				this.drawTexturedModalRect(this.x, this.y, u, v, bWidth, BUTTON_HEIGHT);
+				GlStateManager.disableBlend();
 			}
 		}
 	}

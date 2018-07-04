@@ -1,67 +1,55 @@
 package moze_intel.projecte.network.commands;
 
+import moze_intel.projecte.api.ProjectEAPI;
 import moze_intel.projecte.network.PacketHandler;
 import moze_intel.projecte.network.packets.KnowledgeClearPKT;
-import moze_intel.projecte.playerData.Transmutation;
-import moze_intel.projecte.utils.ChatHelper;
+import net.minecraft.command.CommandBase;
+import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
+import net.minecraft.command.WrongUsageException;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.util.ChatComponentTranslation;
-import net.minecraft.util.EnumChatFormatting;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.text.Style;
+import net.minecraft.util.text.TextComponentTranslation;
+import net.minecraft.util.text.TextFormatting;
 
-public class ClearKnowledgeCMD extends ProjectEBaseCMD
+import javax.annotation.Nonnull;
+
+public class ClearKnowledgeCMD extends CommandBase
 {
+	@Nonnull
 	@Override
-	public String getCommandName() 
+	public String getName()
 	{
-		return "projecte_clearKnowledge";
+		return "clearKnowledge";
 	}
 	
+	@Nonnull
 	@Override
-	public String getCommandUsage(ICommandSender sender)
+	public String getUsage(@Nonnull ICommandSender sender)
 	{
 		return "pe.command.clearknowledge.usage";
 	}
 
 	@Override
-	public void processCommand(ICommandSender sender, String[] params) 
+	public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] params) throws CommandException
 	{
-		if (params.length == 0)
+		if (params.length < 1)
 		{
-			if (sender instanceof EntityPlayerMP)
-			{
-				Transmutation.clearKnowledge(((EntityPlayerMP) sender));
-				PacketHandler.sendTo(new KnowledgeClearPKT(), (EntityPlayerMP) sender);
-				sendSuccess(sender, new ChatComponentTranslation("pe.command.clearknowledge.success", sender.getCommandSenderName()));
-			}
-			else
-			{
-				sendError(sender, new ChatComponentTranslation("pe.command.clearknowledge.error", sender.getCommandSenderName()));
-			}
+			throw new WrongUsageException(getUsage(sender));
 		}
-		else
-		{
-			for (Object obj : sender.getEntityWorld().playerEntities)
-			{
-				EntityPlayer player = (EntityPlayer) obj;
-				
-				if (player.getCommandSenderName().equalsIgnoreCase(params[0]))
-				{
-					Transmutation.clearKnowledge(player);
-					PacketHandler.sendTo(new KnowledgeClearPKT(), (EntityPlayerMP) player);
-					sendSuccess(sender, new ChatComponentTranslation("pe.command.clearknowledge.success", player.getCommandSenderName()));
-					
-					if (!player.getCommandSenderName().equals(sender.getCommandSenderName()))
-					{
-						player.addChatComponentMessage(ChatHelper.modifyColor(new ChatComponentTranslation("pe.command.clearknowledge.notify", sender.getCommandSenderName()), EnumChatFormatting.RED));
-					}
-					
-					return;
-				}
-			}
 
-			sendError(sender, new ChatComponentTranslation("pe.command.clearknowledge.playernotfound", params[0]));
+		for (EntityPlayerMP player : getPlayers(server, sender, params[0]))
+		{
+			player.getCapability(ProjectEAPI.KNOWLEDGE_CAPABILITY, null).clearKnowledge();
+			PacketHandler.sendTo(new KnowledgeClearPKT(), player);
+			sender.sendMessage(new TextComponentTranslation("pe.command.clearknowledge.success", player.getName()));
+
+			if (!player.getName().equals(sender.getName()))
+			{
+				player.sendMessage(new TextComponentTranslation("pe.command.clearknowledge.notify", sender.getName()).setStyle(new Style().setColor(TextFormatting.RED)));
+			}
 		}
 	}
 

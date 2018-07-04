@@ -1,16 +1,18 @@
 package moze_intel.projecte.impl;
 
 import com.google.common.base.Preconditions;
-import cpw.mods.fml.common.Loader;
-import cpw.mods.fml.common.LoaderState;
+import moze_intel.projecte.PECore;
 import moze_intel.projecte.api.proxy.IBlacklistProxy;
 import moze_intel.projecte.gameObjs.items.TimeWatch;
 import moze_intel.projecte.utils.NBTWhitelist;
-import moze_intel.projecte.utils.PELogger;
 import moze_intel.projecte.utils.WorldHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.fml.common.LoaderState;
+
+import javax.annotation.Nonnull;
 
 public class BlacklistProxyImpl implements IBlacklistProxy
 {
@@ -19,7 +21,7 @@ public class BlacklistProxyImpl implements IBlacklistProxy
     private BlacklistProxyImpl() {}
 
     @Override
-    public void blacklistInterdiction(Class<? extends Entity> clazz)
+    public void blacklistInterdiction(@Nonnull Class<? extends Entity> clazz)
     {
         Preconditions.checkNotNull(clazz);
         Preconditions.checkState(Loader.instance().isInState(LoaderState.POSTINITIALIZATION), "Mod %s registering interdiction blacklist at incorrect time!", Loader.instance().activeModContainer().getModId());
@@ -27,7 +29,7 @@ public class BlacklistProxyImpl implements IBlacklistProxy
     }
 
     @Override
-    public void blacklistSwiftwolf(Class<? extends Entity> clazz)
+    public void blacklistSwiftwolf(@Nonnull Class<? extends Entity> clazz)
     {
         Preconditions.checkNotNull(clazz);
         Preconditions.checkState(Loader.instance().isInState(LoaderState.POSTINITIALIZATION), "Mod %s registering SWRG repel at incorrect time!", Loader.instance().activeModContainer().getModId());
@@ -35,7 +37,7 @@ public class BlacklistProxyImpl implements IBlacklistProxy
     }
 
     @Override
-    public void blacklistTimeWatch(Class<? extends TileEntity> clazz)
+    public void blacklistTimeWatch(@Nonnull Class<? extends TileEntity> clazz)
     {
         Preconditions.checkNotNull(clazz);
         Preconditions.checkState(Loader.instance().isInState(LoaderState.POSTINITIALIZATION), "Mod %s registering TimeWatch blacklist at incorrect time!", Loader.instance().activeModContainer().getModId());
@@ -43,7 +45,7 @@ public class BlacklistProxyImpl implements IBlacklistProxy
     }
 
     @Override
-    public void whitelistNBT(ItemStack stack)
+    public void whitelistNBT(@Nonnull ItemStack stack)
     {
         Preconditions.checkNotNull(stack);
         Preconditions.checkState(Loader.instance().isInState(LoaderState.POSTINITIALIZATION), "Mod %s registering NBT whitelist at incorrect time!", Loader.instance().activeModContainer().getModId());
@@ -57,24 +59,24 @@ public class BlacklistProxyImpl implements IBlacklistProxy
     protected void doBlacklistInterdiction(Class<? extends Entity> clazz, String modName)
     {
         WorldHelper.blacklistInterdiction(clazz);
-        PELogger.logInfo("Mod %s blacklisted %s for interdiction torch", modName, clazz.getCanonicalName());
+        PECore.LOGGER.info("Mod {} blacklisted {} for interdiction torch", modName, clazz.getCanonicalName());
     }
 
     protected void doBlacklistSwiftwolf(Class<? extends Entity> clazz, String modName)
     {
         WorldHelper.blacklistSwrg(clazz);
-        PELogger.logInfo("Mod %s blacklisted %s for SWRG repel", modName, clazz.getCanonicalName());
+        PECore.LOGGER.info("Mod {} blacklisted {} for SWRG repel", modName, clazz.getCanonicalName());
     }
 
     protected void doBlacklistTimewatch(Class<? extends TileEntity> clazz, String modName)
     {
         TimeWatch.blacklist(clazz);
-        PELogger.logInfo("Mod %s blacklisted %s for Time Watch acceleration", modName, clazz.getCanonicalName());
+        PECore.LOGGER.info("Mod {} blacklisted {} for Time Watch acceleration", modName, clazz.getCanonicalName());
     }
 
     protected void doWhitelistNBT(ItemStack s, String modName)
     {
         NBTWhitelist.register(s);
-        PELogger.logInfo("Mod %s whitelisted %s for NBT duping", modName, s.toString());
+        PECore.LOGGER.info("Mod {} whitelisted {} for NBT duping", modName, s.toString());
     }
 }

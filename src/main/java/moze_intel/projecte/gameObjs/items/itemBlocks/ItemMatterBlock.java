@@ -1,11 +1,12 @@
 package moze_intel.projecte.gameObjs.items.itemBlocks;
 
-import moze_intel.projecte.utils.AchievementHandler;
 import net.minecraft.block.Block;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.world.World;
+
+import javax.annotation.Nonnull;
 
 public class ItemMatterBlock extends ItemBlock
 {
@@ -16,6 +17,7 @@ public class ItemMatterBlock extends ItemBlock
 		this.hasSubtypes = true;
 	}
 	
+	@Nonnull
 	@Override
 	public String getUnlocalizedName(ItemStack stack)
 	{
@@ -33,23 +35,5 @@ public class ItemMatterBlock extends ItemBlock
 	public int getMetadata(int meta)
 	{
 		return meta;
-	}
-	
-	@Override
-	public void onCreated(ItemStack stack, World world, EntityPlayer player) 
-	{
-		super.onCreated(stack, world, player);
-		
-		if (!world.isRemote)
-		{
-			if (stack.getItemDamage() == 0)
-			{
-				player.addStat(AchievementHandler.DM_BLOCK, 1);
-			}
-			else
-			{
-				player.addStat(AchievementHandler.RM_BLOCK, 1);
-			}
-		}
 	}
 }

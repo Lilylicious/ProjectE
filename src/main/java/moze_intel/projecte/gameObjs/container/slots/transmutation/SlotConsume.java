@@ -3,12 +3,14 @@ package moze_intel.projecte.gameObjs.container.slots.transmutation;
 import moze_intel.projecte.gameObjs.ObjHandler;
 import moze_intel.projecte.gameObjs.container.inventory.TransmutationInventory;
 import moze_intel.projecte.utils.EMCHelper;
-import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.items.SlotItemHandler;
 
-public class SlotConsume extends Slot
+import javax.annotation.Nonnull;
+
+public class SlotConsume extends SlotItemHandler
 {
-	private TransmutationInventory inv;
+	private final TransmutationInventory inv;
 	
 	public SlotConsume(TransmutationInventory inv, int par2, int par3, int par4)
 	{
@@ -17,9 +19,9 @@ public class SlotConsume extends Slot
 	}
 	
 	@Override
-	public void putStack(ItemStack stack)
+	public void putStack(@Nonnull ItemStack stack)
 	{
-		if (stack == null)
+		if (stack.isEmpty())
 		{
 			return;
 		}
@@ -28,10 +30,10 @@ public class SlotConsume extends Slot
 		
 		double toAdd = 0;
 		
-		while (!inv.hasMaxedEmc() && stack.stackSize > 0)
+		while (!inv.hasMaxedEmc() && stack.getCount() > 0)
 		{
-			toAdd += EMCHelper.getEmcValue(stack);
-			stack.stackSize--;
+			toAdd += EMCHelper.getEmcSellValue(stack);
+			stack.shrink(1);
 		}
 		
 		inv.addEmc(toAdd);
@@ -40,7 +42,7 @@ public class SlotConsume extends Slot
 	}
 	
 	@Override
-	public boolean isItemValid(ItemStack stack)
+	public boolean isItemValid(@Nonnull ItemStack stack)
 	{
 		return !inv.hasMaxedEmc() && (EMCHelper.doesItemHaveEmc(stack) || stack.getItem() == ObjHandler.tome);
 	}

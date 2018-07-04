@@ -1,41 +1,27 @@
 package moze_intel.projecte.gameObjs.items.rings;
 
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
+import moze_intel.projecte.api.PESounds;
 import moze_intel.projecte.api.item.IModeChanger;
 import moze_intel.projecte.gameObjs.items.ItemPE;
-import net.minecraft.client.renderer.texture.IIconRegister;
+import moze_intel.projecte.utils.ItemHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.IIcon;
+import net.minecraft.util.EnumHand;
+import net.minecraft.util.SoundCategory;
 import net.minecraft.world.World;
+
+import javax.annotation.Nonnull;
 
 public abstract class RingToggle extends ItemPE implements IModeChanger
 {
-	private String name;
-	@SideOnly(Side.CLIENT)
-	private IIcon ringOn;
-	@SideOnly(Side.CLIENT)
-	private IIcon ringOff;
-	
 	public RingToggle(String unlocalName)
 	{
-		name = unlocalName;
 		this.setUnlocalizedName(unlocalName);
 		this.setMaxStackSize(1);
 		this.setMaxDamage(0);
-		this.setHasSubtypes(true);
-	}
-	
-	@Override
-	public void onUpdate(ItemStack stack, World world, Entity entity, int par4, boolean par5) 
-	{
-		if (!stack.hasTagCompound())
-		{
-			stack.setTagCompound(new NBTTagCompound());
-		}
+		this.addPropertyOverride(ACTIVE_NAME, ACTIVE_GETTER);
 	}
 
 	@Override
@@ -43,39 +29,26 @@ public abstract class RingToggle extends ItemPE implements IModeChanger
 	{
 		return false;
 	}
-	
-	@SideOnly(Side.CLIENT)
-	public IIcon getIconFromDamage(int dmg)
-	{
-		return dmg == 0 ? ringOff : ringOn;
-	}
-	
+
 	@Override
-	@SideOnly(Side.CLIENT)
-	public void registerIcons(IIconRegister register)
+	public byte getMode(@Nonnull ItemStack stack)
 	{
-		ringOn = register.registerIcon(this.getTexture("rings", name+"_on"));
-		ringOff = register.registerIcon(this.getTexture("rings", name+"_off"));
+		return ItemHelper.getOrCreateCompound(stack).getBoolean(TAG_ACTIVE) ? (byte) 1 : 0;
 	}
 
 	@Override
-	public byte getMode(ItemStack stack)
+	public boolean changeMode(@Nonnull EntityPlayer player, @Nonnull ItemStack stack, EnumHand hand)
 	{
-		return (byte) stack.getItemDamage();
-	}
-
-	@Override
-	public void changeMode(EntityPlayer player, ItemStack stack)
-	{
-		if (stack.getItemDamage() == 0)
+		if (!ItemHelper.getOrCreateCompound(stack).getBoolean(TAG_ACTIVE))
 		{
-			player.worldObj.playSoundAtEntity(player, "projecte:item.peheal", 1.0F, 1.0F);
-			stack.setItemDamage(1);
+			player.getEntityWorld().playSound(null, player.posX, player.posY, player.posZ, PESounds.HEAL, SoundCategory.PLAYERS, 1.0F, 1.0F);
+			stack.getTagCompound().setBoolean(TAG_ACTIVE, true);
 		}
 		else
 		{
-			player.worldObj.playSoundAtEntity(player, "projecte:item.peuncharge", 1.0F, 1.0F);
-			stack.setItemDamage(0);
+			player.getEntityWorld().playSound(null, player.posX, player.posY, player.posZ, PESounds.UNCHARGE, SoundCategory.PLAYERS, 1.0F, 1.0F);
+			stack.getTagCompound().setBoolean(TAG_ACTIVE, false);
 		}
+		return true;
 	}
 }

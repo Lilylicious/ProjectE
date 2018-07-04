@@ -1,28 +1,23 @@
 package moze_intel.projecte.gameObjs.items;
 
-import cpw.mods.fml.relauncher.Side;
-import cpw.mods.fml.relauncher.SideOnly;
+import moze_intel.projecte.PECore;
 import moze_intel.projecte.api.item.IItemEmc;
-import moze_intel.projecte.utils.AchievementHandler;
 import moze_intel.projecte.utils.EMCHelper;
-import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.creativetab.CreativeTabs;
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.IIcon;
-import net.minecraft.util.MathHelper;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.EnumActionResult;
+import net.minecraft.util.EnumHand;
+import net.minecraft.util.NonNullList;
 import net.minecraft.world.World;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
-import java.util.List;
+import javax.annotation.Nonnull;
 
 public class KleinStar extends ItemPE implements IItemEmc
 {
-	@SideOnly(Side.CLIENT)
-	private IIcon[] icons;
-	
 	public KleinStar()
 	{
 		this.setUnlocalizedName("klein_star");
@@ -52,53 +47,21 @@ public class KleinStar extends ItemPE implements IItemEmc
 	}
 
 	
+	@Nonnull
 	@Override
-	public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player)
+	public ActionResult<ItemStack> onItemRightClick(World world, EntityPlayer player, @Nonnull EnumHand hand)
 	{
-		/*if (!world.isRemote)
+		ItemStack stack = player.getHeldItem(hand);
+		if (!world.isRemote && PECore.DEV_ENVIRONMENT)
 		{
-			this.setEmc(stack, Utils.GetKleinStarMaxEmc(stack));
-		}*/
+			setEmc(stack, EMCHelper.getKleinStarMaxEmc(stack));
+			return ActionResult.newResult(EnumActionResult.SUCCESS, stack);
+		}
 		
-		return stack;
+		return ActionResult.newResult(EnumActionResult.PASS, stack);
 	}
 	
-	/*@Override
-	public void onCreated(ItemStack stack, World world, EntityPlayer player) 
-	{
-		if (!world.isRemote)
-		{
-			stack.stackTagCompound = new NBTTagCompound();
-		}
-	}*/
-	
-	@Override
-	public void onUpdate(ItemStack stack, World world, Entity entity, int par4, boolean par5) 
-	{
-		if (!stack.hasTagCompound())
-		{
-			stack.stackTagCompound = new NBTTagCompound();
-		}
-	}
-	
-	@Override
-	public void onCreated(ItemStack stack, World world, EntityPlayer player) 
-	{
-		super.onCreated(stack, world, player);
-		
-		if (!world.isRemote)
-		{
-			if (stack.getItemDamage() == 5)
-			{
-				player.addStat(AchievementHandler.KLEIN_MASTER, 1);
-			}
-			else
-			{
-				player.addStat(AchievementHandler.KLEIN_BASIC, 1);
-			}
-		}
-	}
-	
+	@Nonnull
 	@Override
 	public String getUnlocalizedName(ItemStack stack)
 	{
@@ -109,38 +72,40 @@ public class KleinStar extends ItemPE implements IItemEmc
 
 		return super.getUnlocalizedName()+ "_" + (stack.getItemDamage() + 1);
 	}
-	
-	@SideOnly(Side.CLIENT)
-	public void getSubItems(Item item, CreativeTabs cTab, List list)
-	{
-		for (int i = 0; i < 6; ++i)
-		{
-			list.add(new ItemStack(item, 1, i));
-		}
-	}
-	
-	@SideOnly(Side.CLIENT)
-	public IIcon getIconFromDamage(int par1)
-	{
-		return icons[MathHelper.clamp_int(par1, 0, 5)];
-	}
-	
+
 	@Override
 	@SideOnly(Side.CLIENT)
-	public void registerIcons(IIconRegister register)
+	public void getSubItems(CreativeTabs cTab, NonNullList<ItemStack> list)
 	{
-		icons = new IIcon[6];
-		
-		for (int i = 0; i < 6; i++)
+		if (isInCreativeTab(cTab))
 		{
-			icons[i] = register.registerIcon(this.getTexture("stars", "klein_star_"+(i + 1)));
+			for (int i = 0; i < 6; ++i)
+			{
+				list.add(new ItemStack(this, 1, i));
+			}
+		}
+	}
+
+	public enum EnumKleinTier
+	{
+		EIN("ein"),
+		ZWEI("zwei"),
+		DREI("drei"),
+		VIER("vier"),
+		SPHERE("sphere"),
+		OMEGA("omega");
+
+		public final String name;
+		EnumKleinTier(String name)
+		{
+			this.name = name;
 		}
 	}
 
 	// -- IItemEmc -- //
 
 	@Override
-	public double addEmc(ItemStack stack, double toAdd)
+	public double addEmc(@Nonnull ItemStack stack, double toAdd)
 	{
 		double add = Math.min(getMaximumEmc(stack) - getStoredEmc(stack), toAdd);
 		ItemPE.addEmcToStack(stack, add);
@@ -148,7 +113,7 @@ public class KleinStar extends ItemPE implements IItemEmc
 	}
 
 	@Override
-	public double extractEmc(ItemStack stack, double toRemove)
+	public double extractEmc(@Nonnull ItemStack stack, double toRemove)
 	{
 		double sub = Math.min(getStoredEmc(stack), toRemove);
 		ItemPE.removeEmc(stack, sub);
@@ -156,13 +121,13 @@ public class KleinStar extends ItemPE implements IItemEmc
 	}
 
 	@Override
-	public double getStoredEmc(ItemStack stack)
+	public double getStoredEmc(@Nonnull ItemStack stack)
 	{
 		return ItemPE.getEmc(stack);
 	}
 
 	@Override
-	public double getMaximumEmc(ItemStack stack)
+	public double getMaximumEmc(@Nonnull ItemStack stack)
 	{
 		return EMCHelper.getKleinStarMaxEmc(stack);
 	}

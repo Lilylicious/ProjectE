@@ -1,45 +1,44 @@
 package moze_intel.projecte.network.packets;
 
-import com.google.common.collect.Maps;
-import cpw.mods.fml.common.network.simpleimpl.IMessage;
-import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
-import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
+import moze_intel.projecte.PECore;
 import moze_intel.projecte.emc.EMCMapper;
 import moze_intel.projecte.emc.FuelMapper;
 import moze_intel.projecte.emc.SimpleStack;
 import moze_intel.projecte.playerData.Transmutation;
-import moze_intel.projecte.utils.PELogger;
+import net.minecraft.client.Minecraft;
+import net.minecraft.item.Item;
+import net.minecraftforge.fml.common.network.ByteBufUtils;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
+import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 import java.util.List;
 
 public class SyncEmcPKT implements IMessage
 {
-	private int packetNum;
-	private Object[] data;
+	private int[][] data;
 
 	public SyncEmcPKT() {}
 
-	public SyncEmcPKT(int packetNum, List<Integer[]> arrayList)
+	public SyncEmcPKT(int[][] data)
 	{
-		this.packetNum = packetNum;
-		data = arrayList.toArray();
+		this.data = data;
 	}
 
 	@Override
 	public void fromBytes(ByteBuf buf)
 	{
-		packetNum = buf.readInt();
-		int size = buf.readInt();
-		data = new Object[size];
+		int size = ByteBufUtils.readVarInt(buf, 5);
+		data = new int[size][];
 
 		for (int i = 0; i < size; i++)
 		{
-			Integer[] array = new Integer[4];
+			int[] array = new int[3];
 
-			for (int j = 0; j < 4; j++)
+			for (int j = 0; j < 3; j++)
 			{
-				array[j] = buf.readInt();
+				array[j] = ByteBufUtils.readVarInt(buf, 5);
 			}
 
 			data[i] = array;
@@ -49,16 +48,13 @@ public class SyncEmcPKT implements IMessage
 	@Override
 	public void toBytes(ByteBuf buf)
 	{
-		buf.writeInt(packetNum);
-		buf.writeInt(data.length);
+		ByteBufUtils.writeVarInt(buf, data.length, 5);
 
-		for (Object obj : data)
+		for (int[] array : data)
 		{
-			Integer[] array = (Integer[]) obj;
-
-			for (int i = 0; i < 4; i++)
+			for (int i = 0; i < 3; i++)
 			{
-				buf.writeInt(array[i]);
+				ByteBufUtils.writeVarInt(buf, array[i], 5);
 			}
 		}
 	}
@@ -68,33 +64,29 @@ public class SyncEmcPKT implements IMessage
 		@Override
 		public IMessage onMessage(final SyncEmcPKT pkt, MessageContext ctx)
 		{
-			if (pkt.packetNum == 0)
-			{
-				PELogger.logInfo("Receiving EMC data from server.");
+			Minecraft.getMinecraft().addScheduledTask(new Runnable() {
+				@Override
+				public void run() {
+					PECore.LOGGER.info("Receiving EMC data from server.");
+					EMCMapper.emc.clear();
 
-				EMCMapper.emc.clear();
-				EMCMapper.emc = Maps.newLinkedHashMap();
-			}
+					for (int[] array : pkt.data)
+					{
+						Item i = Item.REGISTRY.getObjectById(array[0]);
 
-			for (Object obj : pkt.data)
-			{
-				Integer[] array = (Integer[]) obj;
+						SimpleStack stack = new SimpleStack(i.getRegistryName(), array[1]);
 
-				SimpleStack stack = new SimpleStack(array[0], array[1], array[2]);
+						if (stack.isValid())
+						{
+							EMCMapper.emc.put(stack, array[2]);
+						}
+					}
 
-				if (stack.isValid())
-				{
-					EMCMapper.emc.put(stack, array[3]);
+					Transmutation.cacheFullKnowledge();
+					FuelMapper.loadMap();
 				}
-			}
+			});
 
-			if (pkt.packetNum == -1)
-			{
-				PELogger.logInfo("Received all packets!");
-
-				Transmutation.cacheFullKnowledge();
-				FuelMapper.loadMap();
-			}
 			return null;
 		}
 	}

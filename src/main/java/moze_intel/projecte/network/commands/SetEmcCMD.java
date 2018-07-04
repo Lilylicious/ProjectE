@@ -1,24 +1,27 @@
 package moze_intel.projecte.network.commands;
 
 import moze_intel.projecte.config.CustomEMCParser;
-import moze_intel.projecte.utils.ChatHelper;
 import moze_intel.projecte.utils.MathUtils;
-import net.minecraft.command.ICommandSender;
-import net.minecraft.item.Item;
+import net.minecraft.command.*;
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.ChatComponentTranslation;
-import net.minecraft.util.EnumChatFormatting;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.EnumHand;
+import net.minecraft.util.text.TextComponentTranslation;
 
-public class SetEmcCMD extends ProjectEBaseCMD
+import javax.annotation.Nonnull;
+
+public class SetEmcCMD extends CommandBase
 {
+	@Nonnull
 	@Override
-	public String getCommandName() 
+	public String getName()
 	{
-		return "projecte_setEMC";
+		return "setEMC";
 	}
 
+	@Nonnull
 	@Override
-	public String getCommandUsage(ICommandSender sender) 
+	public String getUsage(@Nonnull ICommandSender sender)
 	{
 		return "pe.command.set.usage";
 	}
@@ -30,12 +33,11 @@ public class SetEmcCMD extends ProjectEBaseCMD
 	}
 
 	@Override
-	public void processCommand(ICommandSender sender, String[] params) 
+	public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] params) throws CommandException
 	{
 		if (params.length < 1)
 		{
-			sendError(sender, new ChatComponentTranslation("pe.command.set.usage"));
-			return;
+			throw new WrongUsageException(getUsage(sender));
 		}
 
 		String name;
@@ -44,21 +46,24 @@ public class SetEmcCMD extends ProjectEBaseCMD
 
 		if (params.length == 1)
 		{
-			ItemStack heldItem = getCommandSenderAsPlayer(sender).getHeldItem();
-
-			if (heldItem == null)
+			ItemStack heldItem = getCommandSenderAsPlayer(sender).getHeldItem(EnumHand.MAIN_HAND);
+			if (heldItem.isEmpty())
 			{
-				sendError(sender, new ChatComponentTranslation("pe.command.set.usage"));
-				return;
+				heldItem = getCommandSenderAsPlayer(sender).getHeldItem(EnumHand.OFF_HAND);
 			}
 
-			name = Item.itemRegistry.getNameForObject(heldItem.getItem());
+			if (heldItem.isEmpty())
+			{
+				throw new WrongUsageException(getUsage(sender));
+			}
+
+			name = heldItem.getItem().getRegistryName().toString();
 			meta = heldItem.getItemDamage();
 			emc = MathUtils.parseInteger(params[0]);
 
 			if (emc < 0)
 			{
-				sendError(sender, new ChatComponentTranslation("pe.command.set.invalidemc", params[0]));
+				throw new NumberInvalidException("pe.command.set.invalidemc", params[0]);
 			}
 		}
 		else
@@ -75,16 +80,14 @@ public class SetEmcCMD extends ProjectEBaseCMD
 
 					if (meta < 0)
 					{
-						sendError(sender, new ChatComponentTranslation("pe.command.set.invalidmeta", params[1]));
-						return;
+						throw new CommandException("pe.command.set.invalidmeta", params[1]);
 					}
 
 					emc = MathUtils.parseInteger(params[2]);
 
 					if (emc < 0)
 					{
-						sendError(sender, new ChatComponentTranslation("pe.command.set.invalidemc", params[0]));
-						return;
+						throw new CommandException("pe.command.set.invalidemc", params[2]);
 					}
 				}
 				else
@@ -93,8 +96,7 @@ public class SetEmcCMD extends ProjectEBaseCMD
 
 					if (emc < 0)
 					{
-						sendError(sender, new ChatComponentTranslation("pe.command.set.invalidemc", params[0]));
-						return;
+						throw new NumberInvalidException("pe.command.set.invalidemc", params[1]);
 					}
 				}
 			}
@@ -104,20 +106,19 @@ public class SetEmcCMD extends ProjectEBaseCMD
 
 				if (emc < 0)
 				{
-					sendError(sender, new ChatComponentTranslation("pe.command.set.invalidemc", params[0]));
-					return;
+					throw new NumberInvalidException("pe.command.set.invalidemc", params[1]);
 				}
 			}
 		}
 
 		if (CustomEMCParser.addToFile(name, meta, emc))
 		{
-			sender.addChatMessage(new ChatComponentTranslation("pe.command.set.success", name, emc));
-			sender.addChatMessage(new ChatComponentTranslation("pe.command.reload.notice"));
+			sender.sendMessage(new TextComponentTranslation("pe.command.set.success", name, emc));
+			sender.sendMessage(new TextComponentTranslation("pe.command.reload.notice"));
 		}
 		else
 		{
-			sendError(sender, new ChatComponentTranslation("pe.command.set.invaliditem", name));
+			throw new CommandException("pe.command.set.invaliditem", name);
 		}
 	}
 }
