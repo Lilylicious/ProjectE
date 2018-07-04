@@ -2,6 +2,7 @@ package moze_intel.projecte.gameObjs.container.inventory;
 
 import moze_intel.projecte.api.ProjectEAPI;
 import moze_intel.projecte.api.capabilities.IKnowledgeProvider;
+import moze_intel.projecte.api.event.PlayerAttemptLearnEvent;
 import moze_intel.projecte.emc.FuelMapper;
 import moze_intel.projecte.utils.Constants;
 import moze_intel.projecte.utils.EMCHelper;
@@ -14,6 +15,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.math.MathHelper;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.items.IItemHandlerModifiable;
 import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.wrapper.CombinedInvWrapper;
@@ -72,16 +74,18 @@ public class TransmutationInventory extends CombinedInvWrapper
 		
 		if (!provider.hasKnowledge(stack))
 		{
-			learnFlag = 300;
-			unlearnFlag = 0;
-
 			if (stack.hasTagCompound() && !NBTWhitelist.shouldDupeWithNBT(stack))
 			{
 				stack.setTagCompound(null);
 			}
 
-			provider.addKnowledge(stack);
-			
+			if (!MinecraftForge.EVENT_BUS.post(new PlayerAttemptLearnEvent(player, stack))) //Only show the "learned" text if the knowledge was added
+			{
+				learnFlag = 300;
+				unlearnFlag = 0;
+				provider.addKnowledge(stack);
+			}
+
 			if (!player.getEntityWorld().isRemote)
 			{
 				provider.sync(((EntityPlayerMP) player));
@@ -126,8 +130,8 @@ public class TransmutationInventory extends CombinedInvWrapper
 	
 	public void checkForUpdates()
 	{
-		int matterEmc = EMCHelper.getEmcValue(outputs.getStackInSlot(0));
-		int fuelEmc = EMCHelper.getEmcValue(outputs.getStackInSlot(FUEL_START));
+		long matterEmc = EMCHelper.getEmcValue(outputs.getStackInSlot(0));
+		long fuelEmc = EMCHelper.getEmcValue(outputs.getStackInSlot(FUEL_START));
 		
 		if (Math.max(matterEmc, fuelEmc) > provider.getEmc())
 		{
@@ -163,7 +167,7 @@ public class TransmutationInventory extends CombinedInvWrapper
 				lockCopy.setItemDamage(0);
 			}
 
-			int reqEmc = EMCHelper.getEmcValue(inputLocks.getStackInSlot(LOCK_INDEX));
+			long reqEmc = EMCHelper.getEmcValue(inputLocks.getStackInSlot(LOCK_INDEX));
 			
 			if (provider.getEmc() < reqEmc)
 			{
@@ -237,7 +241,7 @@ public class TransmutationInventory extends CombinedInvWrapper
 		int matterCounter = 0;
 		int fuelCounter = 0;
 
-		if (!lockCopy.isEmpty())
+		if (!lockCopy.isEmpty() && provider.hasKnowledge(lockCopy))
 		{
 			if (FuelMapper.isStackFuel(lockCopy))
 			{
