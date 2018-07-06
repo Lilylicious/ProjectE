@@ -1,10 +1,10 @@
 package moze_intel.projecte.gameObjs.gui;
 
-import moze_intel.projecte.gameObjs.container.PhilosStoneContainer;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.inventory.ContainerWorkbench;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
@@ -16,7 +16,7 @@ public class GUIPhilosStone extends GuiContainer
 	
 	public GUIPhilosStone(InventoryPlayer inventoryPlayer)
 	{
-		super(new PhilosStoneContainer(inventoryPlayer));
+		super(new ContainerWorkbench(inventoryPlayer, inventoryPlayer.player.world, inventoryPlayer.player.getPosition()));
 	}
 
 	@Override

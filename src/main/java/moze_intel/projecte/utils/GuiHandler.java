@@ -12,7 +12,6 @@ import moze_intel.projecte.gameObjs.container.CondenserMK2Container;
 import moze_intel.projecte.gameObjs.container.DMFurnaceContainer;
 import moze_intel.projecte.gameObjs.container.EternalDensityContainer;
 import moze_intel.projecte.gameObjs.container.MercurialEyeContainer;
-import moze_intel.projecte.gameObjs.container.PhilosStoneContainer;
 import moze_intel.projecte.gameObjs.container.RMFurnaceContainer;
 import moze_intel.projecte.gameObjs.container.RelayMK1Container;
 import moze_intel.projecte.gameObjs.container.RelayMK2Container;
@@ -129,7 +128,7 @@ public class GuiHandler implements IGuiHandler
 			case Constants.MERCURIAL_GUI:
 				return new MercurialEyeContainer(player.inventory, new MercurialEyeInventory(player.getHeldItem(hand)));
 			case Constants.PHILOS_STONE_GUI:
-				return new PhilosStoneContainer(player.inventory);
+				break;
 			case Constants.TRANSMUTATION_GUI:
 				return new TransmutationContainer(player.inventory, new TransmutationInventory(player), hand);
 			case Constants.ETERNAL_DENSITY_GUI:
