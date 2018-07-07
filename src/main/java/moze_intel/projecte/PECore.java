@@ -6,6 +6,7 @@ import moze_intel.projecte.config.CustomEMCParser;
 import moze_intel.projecte.config.NBTWhitelistParser;
 import moze_intel.projecte.config.ProjectEConfig;
 import moze_intel.projecte.emc.EMCMapper;
+import moze_intel.projecte.emc.FuelMapper;
 import moze_intel.projecte.fixes.CapInventoryWalker;
 import moze_intel.projecte.fixes.TENameFix;
 import moze_intel.projecte.gameObjs.ObjHandler;
@@ -153,7 +154,16 @@ public class PECore
 	{
 		NBTWhitelistParser.init();
 		proxy.initializeManual();
-		
+
+		long start = System.currentTimeMillis();
+
+		CustomEMCParser.init();
+
+		LOGGER.info("Starting server-side EMC mapping.");
+
+		EMCMapper.map();
+
+		LOGGER.info("Registered " + EMCMapper.emc.size() + " EMC values. (took " + (System.currentTimeMillis() - start) + " ms)");
 		Integration.init();
 	}
 	
@@ -167,15 +177,7 @@ public class PECore
 			new ThreadCheckUUID(true).start();
 		}
 
-		long start = System.currentTimeMillis();
 
-		CustomEMCParser.init();
-
-		LOGGER.info("Starting server-side EMC mapping.");
-
-		EMCMapper.map();
-
-		LOGGER.info("Registered " + EMCMapper.emc.size() + " EMC values. (took " + (System.currentTimeMillis() - start) + " ms)");
 	}
 
 	@Mod.EventHandler
