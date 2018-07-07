@@ -361,6 +361,7 @@ pe.zero.pedestal3=Activates every %s
 pe.debug.metainvalid.name=Invalid metadata set
 
 pe.nei.worldtransmute=World Transmutation
+pe.nei.condenser=Condenser Upgrade
 pe.nei.philo=Philosopher's Stone Smelting
 
 pe.manual.index=Index
